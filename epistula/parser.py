@@ -110,6 +110,12 @@ class Parser:
             value = self._parse_primary()
             return PrintArgumentNode(marker.line, marker.column, True, value)
         value = self._parse_expression()
+        if isinstance(value, StringLiteralNode):
+            raise CompilationError(
+                value.line,
+                value.column,
+                "Signum citationis '-' exspectabatur.",
+            )
         return PrintArgumentNode(value.line, value.column, False, value)
 
     def _parse_read_statement(self) -> ReadStmtNode:

@@ -30,9 +30,9 @@ read-statement      = "Legere", [ "in", identifier ] ;
 
 if-statement        = "provisum", expression, "<<", NEWLINE,
                       block-body, ">>",
-                      { ",", NEWLINE, "aliter", "provisum", expression, "<<", NEWLINE,
+                      { ",", NEWLINE, { NEWLINE }, "aliter", "provisum", expression, "<<", NEWLINE,
                         block-body, ">>" },
-                      [ ",", NEWLINE, "aliter", "<<", NEWLINE,
+                      [ ",", NEWLINE, { NEWLINE }, "aliter", "<<", NEWLINE,
                         block-body, ">>" ] ;
 
 block-body          = { NEWLINE }, block-statement,
