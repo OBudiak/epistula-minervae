@@ -58,7 +58,7 @@ Arithmetic operators have symbolic and textual spellings:
 | remainder | `%` | `diviso integra` |
 | exponentiation | `^` | `exponens` |
 
-The two forms can be mixed and have the same precedence. Exponentiation is right-associative; the other binary arithmetic operators are left-associative.
+The two forms can be mixed and have the same precedence. All binary arithmetic operators, including exponentiation, are left-associative: `2 ^ 3 ^ 2` is `(2 ^ 3) ^ 2`. Integer division truncates towards zero, and remainder uses the same quotient.
 
 ### Comparisons
 
@@ -128,9 +128,17 @@ Run all positive and negative golden tests:
 python3 tests/run_tests.py
 ```
 
-The suite contains 21 valid programs and 27 invalid programs. Every valid `.em` file has a matching `.ast` dump. Every invalid `.em` file has a matching `.err` file. The runner reports every failed case and returns a non-zero status if anything differs.
+The suite contains 28 valid programs and 42 invalid/range-error programs (70 golden tests), plus 32 independent regression tests. Every valid `.em` file has a matching `.ast` dump. Every invalid `.em` file has a matching `.err` file. The runner checks minimum test counts, applies per-process timeouts, reports failed cases and returns a non-zero status if anything differs. The independent tests include all 3999 canonical Roman literals, exact integer boundaries, scope isolation, arithmetic precedence, byte positions, invalid UTF-8, CR/LF/CRLF, deep inputs and CLI output/error contracts.
 
 `tests/generate_expected.py` is a maintainer-only helper for deliberately refreshing golden files after reviewing an intentional AST or diagnostic-format change.
+
+Do not regenerate expected files merely to make a failing test pass. The independent assertions in `tests/test_regressions.py` are handwritten oracles, not compiler-generated expectations.
+
+## Stage-1 boundaries
+
+This front end parses programs and dumps an AST; it does not execute `Scribe` or `Legere`. Per the assignment, full name resolution, mutability enforcement, type checking (including the boolean type of conditions) and code generation belong to the next stage. The required constant integer overflow check is implemented now, including intermediate results and assignment targets with known types. Block-local declarations do not leak to sibling or enclosing blocks.
+
+Input and output use UTF-8. Locations are 1-based byte columns, not Unicode character or visual tab columns. Newlines may be LF, CRLF or CR. A final top-level dot may be followed directly by EOF. Decimal literal magnitude is limited to `2^63` (the extra magnitude is needed for signed INT64_MIN). Oversized source literals and excessive recursion produce a single formatted error, not a Python traceback.
 
 ## Repository structure
 
@@ -157,3 +165,9 @@ Development is tracked on the `stage1` branch. Before submission:
 3. Add `vovaskochko` as a collaborator and wait until the invitation is accepted.
 4. Open a pull request from `stage1` into `main`, request review from `vovaskochko`, and do not merge it.
 5. Submit the repository URL, pull-request URL and the completed `ai_usage.txt` in Moodle.
+
+The archive is **not yet administratively ready to submit**: `ai_usage.txt` intentionally remains a template at the author's request. A missing or incomplete disclosure gives an automatic grade of 0. Repository creation, collaborator invitation/acceptance, PR review request and Moodle submission must be performed by the student; this project has not been pushed. The first-day invitation requirement cannot be retroactively fulfilled by local code changes.
+
+Existing commits were made with the explicitly generic local identity `Student <student@example.com>`. Configure your actual name/email before making your own commits. Do not misrepresent generated work as independent authorship.
+
+The correction audit and requirement-to-test mapping are in [`docs/audit.md`](docs/audit.md).
