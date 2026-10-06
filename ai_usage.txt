@@ -1,0 +1,36 @@
+IMPORTANT: THIS IS A TEMPLATE. COMPLETE EVERY [TODO] FIELD BEFORE SUBMISSION.
+An incomplete ai_usage.txt causes an automatic grade of 0 for this project stage.
+
+1. AI tools used
+[TODO: List every AI tool and model used while designing, implementing, testing,
+or documenting the project. Include ChatGPT/Codex used to create this project.]
+
+2. Links to chat transcripts
+[TODO: Add shareable links to every relevant chat transcript. Verify that the
+reviewer can open each link.]
+
+3. Prompts
+[TODO: Paste the prompts exactly as they were sent. Include the original task,
+the language-syntax descriptions, clarifications, and requests to generate or
+revise the implementation. Do not summarize prompts when the original text is
+available.]
+
+4. AI output used without changes
+[TODO: Identify files, code sections, grammar rules, tests, documentation, names,
+or design decisions that were accepted exactly as generated. If none, say so.]
+
+5. AI output changed by the student
+[TODO: For every material change, describe the original AI suggestion and what
+you changed yourself. Mention the affected files or functions.]
+
+6. Student-authored work
+[TODO: Describe the parts designed or written independently, including any
+manual debugging, added tests, renamed constructs, or syntax decisions.]
+
+7. Verification
+[TODO: Explain how you reviewed the generated code and grammar. Record the test
+command and result, plus any additional manual cases you ran.]
+
+8. Final declaration
+[TODO: Add a truthful statement confirming that this file completely describes
+the AI assistance used for the submitted stage. Add your name and date.]
