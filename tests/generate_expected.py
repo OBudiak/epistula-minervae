@@ -25,6 +25,7 @@ def main() -> int:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 check=False,
+                timeout=10,
             )
             if (completed.returncode == 0) != expected_success:
                 stream = completed.stderr or completed.stdout
@@ -37,4 +38,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

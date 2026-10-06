@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import unittest
 from pathlib import Path
 
 
@@ -16,9 +17,11 @@ def run_case(source: Path, expected: Path, should_succeed: bool) -> str | None:
         [sys.executable, str(COMPILER), "--ast", str(source)],
         cwd=ROOT,
         text=True,
+        encoding="utf-8",
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
+        timeout=10,
     )
     expected_text = expected.read_text(encoding="utf-8")
 
@@ -34,6 +37,12 @@ def run_case(source: Path, expected: Path, should_succeed: bool) -> str | None:
             return "expected non-zero exit code"
         if completed.stdout:
             return f"expected empty stdout, got {completed.stdout!r}"
+        if (
+            not completed.stderr.startswith("compilation error: line ")
+            or not completed.stderr.endswith("\n")
+            or completed.stderr.count("\n") != 1
+        ):
+            return "expected exactly one formatted compilation-error line"
         if completed.stderr != expected_text:
             return f"error differs: expected {expected_text!r}, got {completed.stderr!r}"
     return None
@@ -47,13 +56,19 @@ def main() -> int:
         ("invalid", ".err", False),
     ):
         directory = TESTS / directory_name
-        for source in sorted(directory.glob("*.em")):
+        sources = sorted(directory.glob("*.em"))
+        if len(sources) < 15:
+            failures.append(f"{directory_name}: fewer than 15 source tests")
+        for source in sources:
             total += 1
             expected = source.with_suffix(suffix)
             if not expected.exists():
                 failures.append(f"{source.name}: missing {expected.name}")
                 continue
-            failure = run_case(source, expected, should_succeed)
+            try:
+                failure = run_case(source, expected, should_succeed)
+            except subprocess.TimeoutExpired:
+                failure = "compiler exceeded the 10-second test timeout"
             if failure is not None:
                 failures.append(f"{source.name}: {failure}")
 
@@ -63,9 +78,11 @@ def main() -> int:
             print(f"- {failure}")
         return 1
     print(f"OK: {total} tests passed")
-    return 0
+    sys.path.insert(0, str(ROOT))
+    suite = unittest.defaultTestLoader.discover(str(TESTS), pattern="test_*.py")
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    return 0 if result.wasSuccessful() else 1
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

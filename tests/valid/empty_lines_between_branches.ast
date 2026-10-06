@@ -1,0 +1,12 @@
+Program @1:1 statements=1
+  If @1:1 then_statements=1 else_if_branches=0 has_else=true
+    Condition
+      BooleanLiteral @1:10 value=true
+    Then
+      Print @2:5 arguments=1
+        PrintArgument @2:12 quoted=false
+          IntegerLiteral @2:12 text="I" value=1 notation="roman"
+    Else statements=1
+      Print @7:5 arguments=1
+        PrintArgument @7:12 quoted=false
+          IntegerLiteral @7:12 text="II" value=2 notation="roman"
