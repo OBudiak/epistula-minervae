@@ -17,12 +17,23 @@ def compile_ast(path: Path) -> str:
     except OSError as exc:
         raise CompilationError(1, 1, "Fasciculus legi non potest.") from exc
     tokens = Lexer(source).scan()
-    program = Parser(tokens).parse_program()
-    OverflowChecker().check(program)
-    return program.dump()
+    parser = Parser(tokens)
+    try:
+        program = parser.parse_program()
+        OverflowChecker().check(program)
+        return program.dump()
+    except RecursionError as exc:
+        token = tokens[min(parser.index, len(tokens) - 1)]
+        raise CompilationError(
+            token.line, token.column, "Structura nimis profunda est."
+        ) from exc
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Stable UTF-8 output even on Windows or an ASCII system locale.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", newline="\n")
     argument_parser = argparse.ArgumentParser(
         description="Epistula Minervae stage-1 lexer and parser"
     )

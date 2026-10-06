@@ -102,13 +102,23 @@ class Parser:
         return PrintNode(keyword.line, keyword.column, arguments)
 
     def _parse_print_argument(self) -> PrintArgumentNode:
-        if self._check(TokenKind.STRING):
-            token = self._peek()
-            raise CompilationError(token.line, token.column, "Signum citationis '-' exspectabatur.")
-        if self._check(TokenKind.MINUS) and self._peek(1).kind == TokenKind.STRING:
+        if (
+            self._check(TokenKind.MINUS)
+            and self._peek(1).kind == TokenKind.STRING
+            and self._peek(2).kind in (
+                TokenKind.COMMA, TokenKind.DOT, TokenKind.SEMICOLON,
+                TokenKind.NEWLINE, TokenKind.EOF,
+            )
+        ):
             marker = self._advance()
             value = self._parse_primary()
             return PrintArgumentNode(marker.line, marker.column, True, value)
+        value = self._parse_print_expression()
+        return PrintArgumentNode(value.line, value.column, False, value)
+
+    def _parse_print_expression(self) -> ExprNode:
+        # The print-* EBNF rules partition expressions by their root shape.
+        # Reuse the precedence parser, then exclude the bare-string partition.
         value = self._parse_expression()
         if isinstance(value, StringLiteralNode):
             raise CompilationError(
@@ -116,7 +126,7 @@ class Parser:
                 value.column,
                 "Signum citationis '-' exspectabatur.",
             )
-        return PrintArgumentNode(value.line, value.column, False, value)
+        return value
 
     def _parse_read_statement(self) -> ReadStmtNode:
         keyword = self._advance()
@@ -137,7 +147,6 @@ class Parser:
         else_if_branches: list[ElseIfNode] = []
         else_body: list[StmtNode] | None = None
         while self._match(TokenKind.COMMA):
-            comma = self._previous()
             self._require_newline()
             self._skip_newlines()
             else_token = self._expect(TokenKind.ELSE, "'aliter' post comma exspectabatur.")
@@ -158,7 +167,8 @@ class Parser:
             else_body = self._parse_block_body()
             self._expect(TokenKind.BLOCK_CLOSE, "Finis clausulae '>>' exspectabatur.")
             if self._check(TokenKind.COMMA):
-                raise CompilationError(comma.line, comma.column, "'aliter' ultimum esse debet.")
+                token = self._peek()
+                raise CompilationError(token.line, token.column, "'aliter' ultimum esse debet.")
             break
 
         return IfNode(
@@ -251,19 +261,31 @@ class Parser:
 
     def _parse_power(self) -> ExprNode:
         expression = self._parse_primary()
-        if self._match(TokenKind.CARET, TokenKind.POW_WORD):
+        while self._match(TokenKind.CARET, TokenKind.POW_WORD):
             operator = self._previous()
-            right = self._parse_unary()
-            return BinaryExprNode(
+            right = self._parse_power_operand()
+            expression = BinaryExprNode(
                 operator.line, operator.column, operator.text, expression, right
             )
         return expression
 
+    def _parse_power_operand(self) -> ExprNode:
+        if self._match(TokenKind.PLUS, TokenKind.MINUS):
+            operator = self._previous()
+            return UnaryExprNode(
+                operator.line, operator.column, operator.text,
+                self._parse_power_operand(),
+            )
+        return self._parse_primary()
+
     def _parse_primary(self) -> ExprNode:
         if self._match(TokenKind.INTEGER):
             token = self._previous()
+            value = 0
+            for character in token.text:
+                value = value * 10 + ord(character) - ord("0")
             return IntegerLiteralNode(
-                token.line, token.column, token.text, int(token.text, 10), "decimal"
+                token.line, token.column, token.text, value, "decimal"
             )
         if self._match(TokenKind.ROMAN_INTEGER):
             token = self._previous()
@@ -301,7 +323,7 @@ class Parser:
 
     @staticmethod
     def _decode_string(text: str) -> str:
-        content = text[1:-1]
+        content = text[1:-1].replace("\r\n", "\n").replace("\r", "\n")
         if content == "nihil":
             return ""
         result = ""

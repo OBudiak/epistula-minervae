@@ -24,7 +24,24 @@ assignment          = identifier, assignment-operator, expression ;
 assignment-operator = "<-" | "⬅" | "aequalis" ;
 
 print-statement     = "Scribe", print-argument, { ",", print-argument } ;
-print-argument      = "-", string-literal | expression ;
+print-argument      = "-", string-literal | print-expression ;
+(* This partition admits compound expressions, but not a bare string with
+   any number of surrounding parentheses. No prose-only exclusion is needed. *)
+print-expression    = additive, comparison-operator, additive | print-additive ;
+print-additive      = multiplicative, additive-operator, multiplicative,
+                      { additive-operator, multiplicative }
+                    | print-multiplicative ;
+print-multiplicative = unary, multiplicative-operator, unary,
+                      { multiplicative-operator, unary } | print-unary ;
+print-unary         = ( "+" | "-" ), unary | print-power ;
+print-power         = primary, power-operator, power-operand,
+                      { power-operator, power-operand } | print-primary ;
+print-primary       = decimal-integer | roman-integer | "Veritas" | "Falsus"
+                    | "nihil" | identifier | "Legere"
+                    | "(", print-expression, ")" ;
+(* A complete '-' STRING print argument is preferentially a quotation,
+   rather than a numeric unary expression. Other compound expressions keep
+   the ordinary expression grammar; their types are checked in stage 2. *)
 
 read-statement      = "Legere", [ "in", identifier ] ;
 
@@ -51,8 +68,9 @@ multiplicative-operator
                     | "/" | "divide"
                     | "%" | "diviso", "integra" ;
 
-unary               = [ "+" | "-" ], unary | power ;
-power               = primary, [ power-operator, unary ] ;
+unary               = ( "+" | "-" ), unary | power ;
+power               = primary, { power-operator, power-operand } ;
+power-operand       = ( "+" | "-" ), power-operand | primary ;
 power-operator      = "^" | "exponens" ;
 
 primary             = decimal-integer
@@ -80,17 +98,44 @@ digit               = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" 
 decimal-integer     = digit, { digit } ;
 
 (* Roman tokens use the canonical representation from I through MMMCMXCIX.
-   At least one of the following groups must be non-empty. *)
-roman-integer       = roman-thousands, roman-hundreds, roman-tens, roman-ones ;
-roman-thousands     = [ "M", [ "M", [ "M" ] ] ] ;
-roman-hundreds      = [ "CM" | "CD" | "D", [ "C", [ "C", [ "C" ] ] ]
-                    | "C", [ "C", [ "C" ] ] ] ;
-roman-tens          = [ "XC" | "XL" | "L", [ "X", [ "X", [ "X" ] ] ]
-                    | "X", [ "X", [ "X" ] ] ] ;
-roman-ones          = [ "IX" | "IV" | "V", [ "I", [ "I", [ "I" ] ] ]
-                    | "I", [ "I", [ "I" ] ] ] ;
+   These alternatives require at least one non-empty group. *)
+roman-integer       = roman-thousands, [ roman-hundreds ], [ roman-tens ], [ roman-ones ]
+                    | roman-hundreds, [ roman-tens ], [ roman-ones ]
+                    | roman-tens, [ roman-ones ] | roman-ones ;
+roman-thousands     = "M", [ "M", [ "M" ] ] ;
+roman-hundreds      = "CM" | "CD" | "D", [ "C", [ "C", [ "C" ] ] ]
+                    | "C", [ "C", [ "C" ] ] ;
+roman-tens          = "XC" | "XL" | "L", [ "X", [ "X", [ "X" ] ] ]
+                    | "X", [ "X", [ "X" ] ] ;
+roman-ones          = "IX" | "IV" | "V", [ "I", [ "I", [ "I" ] ] ]
+                    | "I", [ "I", [ "I" ] ] ;
 
 string-literal      = '"', { string-character | "/linea" | "//" }, '"' ;
 
-line-comment        = "N.B.", { byte-except-NEWLINE }, NEWLINE ;
+line-comment        = "N.B.", { byte-except-NEWLINE }, ( NEWLINE | EOF ) ;
 block-comment       = "(N.B.", { byte-except-closing-parenthesis }, ")" ;
+
+NEWLINE             = ? one LF byte, one CR byte, or a CR-LF pair ? ;
+EOF                 = ? end of input, not a source character ? ;
+string-character    = ? any valid UTF-8 character except double quote or slash ? ;
+byte-except-NEWLINE  = ? any UTF-8 byte except CR and LF ? ;
+byte-except-closing-parenthesis
+                    = ? any UTF-8 byte except ')' ? ;
+
+(* Lexical constraints and layout:
+   - Input must be valid UTF-8. Line/column are 1-based byte positions.
+   - Space and tab are ignored. Comments are ignored; the line-comment's
+     ending NEWLINE is preserved. Newlines inside block comments/strings
+     update positions without emitting layout tokens.
+   - Maximal munch applies to identifiers. Reserved words, o-o and oxo
+     cannot be identifiers. All-Roman-symbol words are Roman tokens, and
+     noncanonical forms are lexical errors, not identifiers.
+   - 32bitInt and 64bitInt are whole-word tokens despite their initial digit.
+   - A decimal literal's magnitude must be <= 9223372036854775808; the upper
+     boundary can occur as the operand of a negative sign for INT64_MIN.
+     Leading zeros are unrestricted. An adjacent letter/underscore after
+     decimal digits is a lexical error, not two separate tokens.
+   - No expression or simple statement spans NEWLINE outside string literals
+     and block comments. EOF may replace the final top-level line ending.
+   - Constant overflow is a separate required range check, not grammar.
+*)

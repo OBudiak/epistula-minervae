@@ -41,14 +41,23 @@ class Lexer:
         self.tokens: list[Token] = []
 
     def scan(self) -> list[Token]:
+        # Decoding validates the encoding only; tokenization remains byte-based.
+        try:
+            self.source.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            while self.index < exc.start:
+                self._advance()
+            raise CompilationError(
+                self.line, self.column, "Series UTF-8 invalida est."
+            ) from exc
         while not self._at_end():
             current = self._peek()
 
-            if current in (0x20, 0x09, 0x0D):
+            if current in (0x20, 0x09):
                 self._advance()
                 continue
-            if current == 0x0A:
-                self._emit_single(TokenKind.NEWLINE)
+            if current in (0x0A, 0x0D):
+                self._newline()
                 continue
 
             if self._starts(b"(N.B."):
@@ -126,7 +135,22 @@ class Lexer:
         line, column = self.line, self.column
         while not self._at_end() and self._is_digit(self._peek()):
             self._advance()
-        if not self._at_end() and self._is_identifier_continue(self._peek()):
+        # Keep conversion and AST dumping independent of Python's int/string
+        # digit limit. Leading zeros do not count towards significant digits.
+        significant = start
+        while significant < self.index and self.source[significant] == 0x30:
+            significant += 1
+        if self.index - significant > 19:
+            raise CompilationError(line, column, "Valor fines 64bitInt excedit.")
+        magnitude = 0
+        for offset in range(significant, self.index):
+            magnitude = magnitude * 10 + self.source[offset] - 0x30
+        # The extra positive magnitude is necessary for -9223372036854775808.
+        if magnitude > 2**63:
+            raise CompilationError(line, column, "Valor fines 64bitInt excedit.")
+        if not self._at_end() and (
+            self._is_letter(self._peek()) or self._peek() == 0x5F
+        ):
             while not self._at_end() and self._is_identifier_continue(self._peek()):
                 self._advance()
             raise CompilationError(
@@ -191,8 +215,17 @@ class Lexer:
 
     def _line_comment(self) -> None:
         self._advance_many(4)
-        while not self._at_end() and self._peek() != 0x0A:
+        while not self._at_end() and self._peek() not in (0x0A, 0x0D):
             self._advance()
+
+    def _newline(self) -> None:
+        start = self.index
+        line, column = self.line, self.column
+        if self._starts(b"\r\n"):
+            self._advance_many(2)
+        else:
+            self._advance()
+        self._append(TokenKind.NEWLINE, start, line, column)
 
     def _block_comment(self) -> None:
         line, column = self.line, self.column
@@ -227,8 +260,12 @@ class Lexer:
     def _advance(self) -> int:
         value = self.source[self.index]
         self.index += 1
-        if value == 0x0A:
+        if value == 0x0D:
             self.line += 1
+            self.column = 1
+        elif value == 0x0A:
+            if self.index < 2 or self.source[self.index - 2] != 0x0D:
+                self.line += 1
             self.column = 1
         else:
             self.column += 1
