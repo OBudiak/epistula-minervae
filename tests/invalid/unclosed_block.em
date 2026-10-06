@@ -1,0 +1,3 @@
+provisum Veritas <<
+    Scribe X;
+

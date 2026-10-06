@@ -1,0 +1,16 @@
+Program @1:1 statements=5
+  VarDecl @1:1 name="Count" type="32bitInt" mutable=true keyword="variabilis"
+    IntegerLiteral @1:30 text="0" value=0 notation="decimal"
+  ReadStmt @2:1 target=null
+  ReadStmt @3:1 target="Count"
+  Assignment @4:1 name="Count" operator="<-"
+    ReadExpr @4:10
+  If @5:1 then_statements=1 else_if_branches=0 has_else=false
+    Condition
+      ComparisonExpr @5:17 operator="idem"
+        ReadExpr @5:10
+        StringLiteral @5:22 value="text"
+    Then
+      Print @6:5 arguments=1
+        PrintArgument @6:12 quoted=true
+          StringLiteral @6:14 value="Recte"

@@ -1,0 +1,24 @@
+Program @1:1 statements=3
+  VarDecl @1:1 name="A" type="32bitInt" mutable=true keyword="variabilis"
+    IntegerLiteral @1:26 text="X" value=10 notation="roman"
+  VarDecl @2:1 name="B" type="32bitInt" mutable=true keyword="variabilis"
+    IntegerLiteral @2:26 text="X" value=10 notation="roman"
+  If @3:1 then_statements=1 else_if_branches=0 has_else=true
+    Condition
+      ComparisonExpr @3:12 operator="idem"
+        Identifier @3:10 name="A"
+        Identifier @3:17 name="B"
+    Then
+      If @4:5 then_statements=1 else_if_branches=0 has_else=false
+        Condition
+          ComparisonExpr @4:16 operator="oxo"
+            Identifier @4:14 name="A"
+            IntegerLiteral @4:20 text="0" value=0 notation="decimal"
+        Then
+          Print @5:9 arguments=1
+            PrintArgument @5:16 quoted=false
+              Identifier @5:16 name="A"
+    Else statements=1
+      Print @9:5 arguments=1
+        PrintArgument @9:12 quoted=false
+          Identifier @9:12 name="B"

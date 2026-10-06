@@ -1,0 +1,7 @@
+Program @1:1 statements=2
+  VarDecl @1:1 name="item-2" type="32bitInt" mutable=true keyword="variabilis"
+    IntegerLiteral @1:31 text="X" value=10 notation="roman"
+  VarDecl @2:1 name="sum_total" type="32bitInt" mutable=true keyword="variabilis"
+    BinaryExpr @2:41 operator="+"
+      Identifier @2:34 name="item-2"
+      IntegerLiteral @2:43 text="I" value=1 notation="roman"

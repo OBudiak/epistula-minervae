@@ -1,0 +1,9 @@
+Program @1:1 statements=4
+  VarDecl @1:1 name="Count" type="32bitInt" mutable=true keyword="variabilis"
+    IntegerLiteral @1:30 text="X" value=10 notation="roman"
+  Assignment @2:1 name="Count" operator="<-"
+    IntegerLiteral @2:10 text="XI" value=11 notation="roman"
+  Assignment @3:1 name="Count" operator="⬅"
+    IntegerLiteral @3:11 text="XII" value=12 notation="roman"
+  Assignment @4:1 name="Count" operator="aequalis"
+    IntegerLiteral @4:16 text="XIII" value=13 notation="roman"

@@ -1,0 +1,9 @@
+Program @1:1 statements=2
+  VarDecl @1:1 name="Equal" type="sententia" mutable=true keyword="variabilis"
+    ComparisonExpr @1:33 operator="o-o"
+      IntegerLiteral @1:31 text="X" value=10 notation="roman"
+      IntegerLiteral @1:37 text="10" value=10 notation="decimal"
+  VarDecl @2:1 name="Different" type="sententia" mutable=true keyword="variabilis"
+    ComparisonExpr @2:37 operator="oxo"
+      IntegerLiteral @2:35 text="X" value=10 notation="roman"
+      IntegerLiteral @2:41 text="XI" value=11 notation="roman"

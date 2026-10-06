@@ -1,0 +1,2 @@
+variabilis Count <- 10.
+
