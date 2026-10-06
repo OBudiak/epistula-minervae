@@ -1,0 +1,96 @@
+(* Epistula Minervae, stage 1. NEWLINE is a significant lexer token. *)
+
+program             = { NEWLINE | top-statement }, EOF ;
+
+top-statement       = simple-statement, ".", line-end
+                    | if-statement, ".", line-end ;
+
+block-statement     = simple-statement, ";", NEWLINE
+                    | if-statement, ";", NEWLINE ;
+
+simple-statement    = declaration
+                    | assignment
+                    | print-statement
+                    | read-statement ;
+
+declaration         = mutable-keyword, type, identifier, assignment-operator, expression
+                    | immutable-keyword, type, identifier, assignment-operator, expression ;
+
+mutable-keyword     = "variabilis" ;
+immutable-keyword   = "immutabilis" | "inaeternum" ;
+type                = "32bitInt" | "64bitInt" | "sententia" ;
+
+assignment          = identifier, assignment-operator, expression ;
+assignment-operator = "<-" | "⬅" | "aequalis" ;
+
+print-statement     = "Scribe", print-argument, { ",", print-argument } ;
+print-argument      = "-", string-literal | expression ;
+
+read-statement      = "Legere", [ "in", identifier ] ;
+
+if-statement        = "provisum", expression, "<<", NEWLINE,
+                      block-body, ">>",
+                      { ",", NEWLINE, "aliter", "provisum", expression, "<<", NEWLINE,
+                        block-body, ">>" },
+                      [ ",", NEWLINE, "aliter", "<<", NEWLINE,
+                        block-body, ">>" ] ;
+
+block-body          = { NEWLINE }, block-statement,
+                      { { NEWLINE }, block-statement }, { NEWLINE } ;
+
+expression          = comparison ;
+comparison          = additive, [ comparison-operator, additive ] ;
+comparison-operator = "o-o" | "idem" | "oxo" | "non", "idem" ;
+
+additive            = multiplicative, { additive-operator, multiplicative } ;
+additive-operator   = "+" | "adde" | "-" | "subtrahe" ;
+
+multiplicative      = unary, { multiplicative-operator, unary } ;
+multiplicative-operator
+                    = "*" | "multiplica"
+                    | "/" | "divide"
+                    | "%" | "diviso", "integra" ;
+
+unary               = [ "+" | "-" ], unary | power ;
+power               = primary, [ power-operator, unary ] ;
+power-operator      = "^" | "exponens" ;
+
+primary             = decimal-integer
+                    | roman-integer
+                    | "Veritas"
+                    | "Falsus"
+                    | "nihil"
+                    | string-literal
+                    | identifier
+                    | "Legere"
+                    | "(", expression, ")" ;
+
+line-end            = NEWLINE | EOF ;
+
+(* Lexical grammar. Keywords are excluded from identifier. An identifier made
+   only of I, V, X, L, C, D and M is reserved for a Roman integer token. *)
+identifier          = letter, { letter | digit | "_" | "-" } ;
+letter              = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I"
+                    | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R"
+                    | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z"
+                    | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i"
+                    | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r"
+                    | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" ;
+digit               = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+decimal-integer     = digit, { digit } ;
+
+(* Roman tokens use the canonical representation from I through MMMCMXCIX.
+   At least one of the following groups must be non-empty. *)
+roman-integer       = roman-thousands, roman-hundreds, roman-tens, roman-ones ;
+roman-thousands     = [ "M", [ "M", [ "M" ] ] ] ;
+roman-hundreds      = [ "CM" | "CD" | "D", [ "C", [ "C", [ "C" ] ] ]
+                    | "C", [ "C", [ "C" ] ] ] ;
+roman-tens          = [ "XC" | "XL" | "L", [ "X", [ "X", [ "X" ] ] ]
+                    | "X", [ "X", [ "X" ] ] ] ;
+roman-ones          = [ "IX" | "IV" | "V", [ "I", [ "I", [ "I" ] ] ]
+                    | "I", [ "I", [ "I" ] ] ] ;
+
+string-literal      = '"', { string-character | "/linea" | "//" }, '"' ;
+
+line-comment        = "N.B.", { byte-except-NEWLINE }, NEWLINE ;
+block-comment       = "(N.B.", { byte-except-closing-parenthesis }, ")" ;
