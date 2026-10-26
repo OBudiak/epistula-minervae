@@ -1,0 +1,6 @@
+Program @1:40 statements=2
+  VarDecl @2:1 name="Count" type="32bitInt" mutable=true keyword="variabilis"
+    IntegerLiteral @2:59 text="X" value=10 notation="roman"
+  Print @5:1 arguments=1
+    PrintArgument @5:8 quoted=false
+      Identifier @5:8 name="Count"

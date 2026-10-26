@@ -1,0 +1,12 @@
+Program @1:1 statements=2
+  VarDecl @1:1 name="Result" type="32bitInt" mutable=true keyword="variabilis"
+    UnaryExpr @1:31 operator="-"
+      BinaryExpr @1:34 operator="^"
+        IntegerLiteral @1:32 text="2" value=2 notation="decimal"
+        IntegerLiteral @1:36 text="2" value=2 notation="decimal"
+  Print @2:1 arguments=1
+    PrintArgument @2:10 quoted=false
+      BinaryExpr @2:10 operator="^"
+        IntegerLiteral @2:8 text="2" value=2 notation="decimal"
+        UnaryExpr @2:12 operator="-"
+          IntegerLiteral @2:13 text="2" value=2 notation="decimal"

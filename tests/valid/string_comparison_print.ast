@@ -1,0 +1,11 @@
+Program @1:1 statements=2
+  Print @1:1 arguments=1
+    PrintArgument @1:15 quoted=false
+      ComparisonExpr @1:15 operator="idem"
+        StringLiteral @1:8 value="text"
+        ReadExpr @1:20
+  Print @2:1 arguments=1
+    PrintArgument @2:15 quoted=false
+      ComparisonExpr @2:15 operator="non idem"
+        ReadExpr @2:8
+        StringLiteral @2:24 value=""

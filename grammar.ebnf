@@ -1,0 +1,141 @@
+(* Epistula Minervae, stage 1. NEWLINE is a significant lexer token. *)
+
+program             = { NEWLINE | top-statement }, EOF ;
+
+top-statement       = simple-statement, ".", line-end
+                    | if-statement, ".", line-end ;
+
+block-statement     = simple-statement, ";", NEWLINE
+                    | if-statement, ";", NEWLINE ;
+
+simple-statement    = declaration
+                    | assignment
+                    | print-statement
+                    | read-statement ;
+
+declaration         = mutable-keyword, type, identifier, assignment-operator, expression
+                    | immutable-keyword, type, identifier, assignment-operator, expression ;
+
+mutable-keyword     = "variabilis" ;
+immutable-keyword   = "immutabilis" | "inaeternum" ;
+type                = "32bitInt" | "64bitInt" | "sententia" ;
+
+assignment          = identifier, assignment-operator, expression ;
+assignment-operator = "<-" | "⬅" | "aequalis" ;
+
+print-statement     = "Scribe", print-argument, { ",", print-argument } ;
+print-argument      = "-", string-literal | print-expression ;
+(* This partition admits compound expressions, but not a bare string with
+   any number of surrounding parentheses. No prose-only exclusion is needed. *)
+print-expression    = additive, comparison-operator, additive | print-additive ;
+print-additive      = multiplicative, additive-operator, multiplicative,
+                      { additive-operator, multiplicative }
+                    | print-multiplicative ;
+print-multiplicative = unary, multiplicative-operator, unary,
+                      { multiplicative-operator, unary } | print-unary ;
+print-unary         = ( "+" | "-" ), unary | print-power ;
+print-power         = primary, power-operator, power-operand,
+                      { power-operator, power-operand } | print-primary ;
+print-primary       = decimal-integer | roman-integer | "Veritas" | "Falsus"
+                    | "nihil" | identifier | "Legere"
+                    | "(", print-expression, ")" ;
+(* A complete '-' STRING print argument is preferentially a quotation,
+   rather than a numeric unary expression. Other compound expressions keep
+   the ordinary expression grammar; their types are checked in stage 2. *)
+
+read-statement      = "Legere", [ "in", identifier ] ;
+
+if-statement        = "provisum", expression, "<<", NEWLINE,
+                      block-body, ">>",
+                      { ",", NEWLINE, { NEWLINE }, "aliter", "provisum", expression, "<<", NEWLINE,
+                        block-body, ">>" },
+                      [ ",", NEWLINE, { NEWLINE }, "aliter", "<<", NEWLINE,
+                        block-body, ">>" ] ;
+
+block-body          = { NEWLINE }, block-statement,
+                      { { NEWLINE }, block-statement }, { NEWLINE } ;
+
+expression          = comparison ;
+comparison          = additive, [ comparison-operator, additive ] ;
+comparison-operator = "o-o" | "idem" | "oxo" | "non", "idem" ;
+
+additive            = multiplicative, { additive-operator, multiplicative } ;
+additive-operator   = "+" | "adde" | "-" | "subtrahe" ;
+
+multiplicative      = unary, { multiplicative-operator, unary } ;
+multiplicative-operator
+                    = "*" | "multiplica"
+                    | "/" | "divide"
+                    | "%" | "diviso", "integra" ;
+
+unary               = ( "+" | "-" ), unary | power ;
+power               = primary, { power-operator, power-operand } ;
+power-operand       = ( "+" | "-" ), power-operand | primary ;
+power-operator      = "^" | "exponens" ;
+
+primary             = decimal-integer
+                    | roman-integer
+                    | "Veritas"
+                    | "Falsus"
+                    | "nihil"
+                    | string-literal
+                    | identifier
+                    | "Legere"
+                    | "(", expression, ")" ;
+
+line-end            = NEWLINE | EOF ;
+
+(* Lexical grammar. Keywords are excluded from identifier. An identifier made
+   only of I, V, X, L, C, D and M is reserved for a Roman integer token. *)
+identifier          = letter, { letter | digit | "_" | "-" } ;
+letter              = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I"
+                    | "J" | "K" | "L" | "M" | "N" | "O" | "P" | "Q" | "R"
+                    | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z"
+                    | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i"
+                    | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r"
+                    | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" ;
+digit               = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+decimal-integer     = digit, { digit } ;
+
+(* Roman tokens use the canonical representation from I through MMMCMXCIX.
+   These alternatives require at least one non-empty group. *)
+roman-integer       = roman-thousands, [ roman-hundreds ], [ roman-tens ], [ roman-ones ]
+                    | roman-hundreds, [ roman-tens ], [ roman-ones ]
+                    | roman-tens, [ roman-ones ] | roman-ones ;
+roman-thousands     = "M", [ "M", [ "M" ] ] ;
+roman-hundreds      = "CM" | "CD" | "D", [ "C", [ "C", [ "C" ] ] ]
+                    | "C", [ "C", [ "C" ] ] ;
+roman-tens          = "XC" | "XL" | "L", [ "X", [ "X", [ "X" ] ] ]
+                    | "X", [ "X", [ "X" ] ] ;
+roman-ones          = "IX" | "IV" | "V", [ "I", [ "I", [ "I" ] ] ]
+                    | "I", [ "I", [ "I" ] ] ;
+
+string-literal      = '"', { string-character | "/linea" | "//" }, '"' ;
+
+line-comment        = "N.B.", { byte-except-NEWLINE }, ( NEWLINE | EOF ) ;
+block-comment       = "(N.B.", { byte-except-closing-parenthesis }, ")" ;
+
+NEWLINE             = ? one LF byte, one CR byte, or a CR-LF pair ? ;
+EOF                 = ? end of input, not a source character ? ;
+string-character    = ? any valid UTF-8 character except double quote or slash ? ;
+byte-except-NEWLINE  = ? any UTF-8 byte except CR and LF ? ;
+byte-except-closing-parenthesis
+                    = ? any UTF-8 byte except ')' ? ;
+
+(* Lexical constraints and layout:
+   - Input must be valid UTF-8. Line/column are 1-based byte positions.
+   - Space and tab are ignored. Comments are ignored; the line-comment's
+     ending NEWLINE is preserved. Newlines inside block comments/strings
+     update positions without emitting layout tokens.
+   - Maximal munch applies to identifiers. Reserved words, o-o and oxo
+     cannot be identifiers. All-Roman-symbol words are Roman tokens, and
+     noncanonical forms are lexical errors, not identifiers.
+   - 32bitInt and 64bitInt are whole-word tokens despite their initial digit.
+   - A decimal literal's magnitude must be <= 9223372036854775808; the upper
+     boundary can occur as the operand of a negative sign for INT64_MIN.
+     Leading zeros are unrestricted. An adjacent letter/underscore after
+     decimal digits is a lexical error, not two separate tokens.
+   - No expression or simple statement spans NEWLINE outside string literals
+     and block comments. EOF may replace the final top-level line ending.
+   - Constant overflow is a separate required range check, not grammar.
+*)

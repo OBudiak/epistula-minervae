@@ -1,0 +1,13 @@
+Program @1:1 statements=4
+  VarDecl @1:1 name="Optional" type="32bitInt" mutable=true keyword="variabilis"
+    NilLiteral @1:33
+  VarDecl @2:1 name="Missing" type="sententia" mutable=true keyword="variabilis"
+    ComparisonExpr @2:42 operator="idem"
+      Identifier @2:33 name="Optional"
+      NilLiteral @2:47
+  Print @3:1 arguments=1
+    PrintArgument @3:8 quoted=false
+      NilLiteral @3:8
+  Print @4:1 arguments=1
+    PrintArgument @4:8 quoted=true
+      StringLiteral @4:10 value=""

@@ -1,0 +1,4 @@
+Program @1:1 statements=1
+  Print @1:1 arguments=1
+    PrintArgument @1:8 quoted=true
+      StringLiteral @1:10 value="prima\nsecunda"

@@ -1,0 +1,11 @@
+Program @1:1 statements=3
+  VarDecl @1:1 name="Count" type="64bitInt" mutable=true keyword="variabilis"
+    IntegerLiteral @1:30 text="I" value=1 notation="roman"
+  If @2:1 then_statements=1 else_if_branches=0 has_else=false
+    Condition
+      BooleanLiteral @2:10 value=true
+    Then
+      VarDecl @3:5 name="Count" type="32bitInt" mutable=true keyword="variabilis"
+        IntegerLiteral @3:34 text="I" value=1 notation="roman"
+  Assignment @5:1 name="Count" operator="<-"
+    IntegerLiteral @5:10 text="2147483648" value=2147483648 notation="decimal"

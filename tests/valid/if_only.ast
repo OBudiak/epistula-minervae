@@ -1,0 +1,12 @@
+Program @1:1 statements=2
+  VarDecl @1:1 name="Count" type="32bitInt" mutable=true keyword="variabilis"
+    IntegerLiteral @1:30 text="X" value=10 notation="roman"
+  If @2:1 then_statements=1 else_if_branches=0 has_else=false
+    Condition
+      ComparisonExpr @2:16 operator="idem"
+        Identifier @2:10 name="Count"
+        IntegerLiteral @2:21 text="X" value=10 notation="roman"
+    Then
+      Print @3:5 arguments=1
+        PrintArgument @3:12 quoted=false
+          Identifier @3:12 name="Count"
