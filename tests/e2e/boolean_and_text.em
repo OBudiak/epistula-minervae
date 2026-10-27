@@ -3,4 +3,4 @@ nuntia structuram Notice <<
     immutabilis sententia message <- "salve";
 >>.
 immutabilis n <- Notice cape nihil.
-Scribe n, - "/linea".
+Scribe n, "/linea".

@@ -6,4 +6,4 @@ nuntia structuram Outer <<
 >>.
 variabilis o <- Outer cape Inner cape 1.
 o > center.x <- 5.
-Scribe o.center > x, - "/linea".
+Scribe o.center > x, "/linea".

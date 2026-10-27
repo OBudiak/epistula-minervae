@@ -247,12 +247,12 @@ class Parser:
         if self._check(TokenKind.DOT, TokenKind.SEMICOLON, TokenKind.NEWLINE, TokenKind.EOF):
             token = self._peek()
             raise CompilationError(token.line, token.column, "Argumentum Scribe exspectabatur.")
-        arguments = [self._parse_print_argument()]
+        arguments = [self._parse_print_argument(first=True)]
         while self._match(TokenKind.COMMA):
-            arguments.append(self._parse_print_argument())
+            arguments.append(self._parse_print_argument(first=False))
         return PrintNode(keyword.line, keyword.column, arguments)
 
-    def _parse_print_argument(self) -> PrintArgumentNode:
+    def _parse_print_argument(self, first: bool) -> PrintArgumentNode:
         if (
             self._check(TokenKind.MINUS)
             and self._peek(1).kind == TokenKind.STRING
@@ -264,14 +264,15 @@ class Parser:
             marker = self._advance()
             value = self._parse_primary()
             return PrintArgumentNode(marker.line, marker.column, True, value)
-        value = self._parse_print_expression()
+        value = self._parse_print_expression(require_marker=first)
         return PrintArgumentNode(value.line, value.column, False, value)
 
-    def _parse_print_expression(self) -> ExprNode:
-        # The print-* EBNF rules partition expressions by their root shape.
-        # Reuse the precedence parser, then exclude the bare-string partition.
+    def _parse_print_expression(self, require_marker: bool) -> ExprNode:
+        # The first bare string is quoted explicitly; later bare strings are
+        # regular print arguments. Parentheses never bypass the first marker.
+        parenthesized = self._check(TokenKind.LPAREN)
         value = self._parse_expression()
-        if isinstance(value, StringLiteralNode):
+        if isinstance(value, StringLiteralNode) and (require_marker or parenthesized):
             raise CompilationError(
                 value.line,
                 value.column,

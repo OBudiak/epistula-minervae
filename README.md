@@ -44,7 +44,7 @@ The two integer widths are compatible in either direction. Widening sign-extends
 nuntia edictum Add quo cape integer A, integer B remitteque integer <<
     reditus A + B!
 >>.
-Scribe Add(20, 22), - "/linea".
+Scribe Add(20, 22), "/linea".
 ```
 
 The alternative `integer Double <- nuntia edictum quo cape integer X << ... >>.` declares the same kind of function: `Double` is its name and `integer` its result type. Calls are expressions and accept either `Add(20, 22)` or `Add quo cape 20, 22`; empty calls are `F(nihil)` or `F quo cape nihil`. Calls can nest. When a call is a whole statement, it ends with `.` at top level or `;` in a block; calls inside another expression have no separate terminator. Argument count and each argument type are checked before IR generation.
@@ -60,7 +60,7 @@ nuntia structuram Point <<
 >>.
 variabilis p <- Point cape 3.
 variabilis q <- Point cape y <- 5, 2.
-Scribe p, - "/linea".
+Scribe p, "/linea".
 ```
 
 Fields and methods use `.` or `>`; the separators may mix, as in `p.center > x`. Assignment through a chain requires the starting object and every field on the path to be mutable. `immutabilis Point p <- ...` makes that object and nested paths immutable. `nuntia structuram immutabilem Name quo << ... >>.` makes every object of the type immutable.
@@ -69,11 +69,11 @@ A member function is declared inside a structure with `nuntia edictum` and is ca
 
 ## Input and output
 
-`Legere` reads one integer from standard input. It is an expression, a statement, or `Legere in Name`. `Scribe` prints its arguments in order without inserting separators or a newline. It accepts integers, booleans (`true`/`false`), text, `nihil`, and structures. A direct string literal in `Scribe` retains the Stage 1 quotation marker `-`; `/linea` inside text produces a newline. An object prints as `Type{field=value, other=value}` in field declaration order, recursively for nested objects.
+`Legere` reads one integer from standard input. It is an expression, a statement, or `Legere in Name`. `Scribe` prints its arguments in order without inserting separators or a newline. It accepts integers, booleans (`true`/`false`), text, `nihil`, and structures. The first direct string literal in `Scribe` uses the Stage 1 quotation marker `-`; later string arguments need no marker. `/linea` inside text produces a newline. An object prints as `Type{field=value, other=value}` in field declaration order, recursively for nested objects.
 
 ```text
 variabilis A <- Legere.
-Scribe - "Value: ", A, - "/linea".
+Scribe - "Value: ", A, "/linea".
 ```
 
 The special string literal `"nihil"` is empty text. For legacy Stage 1 integer values initialized with bare `nihil`, the stored numeric value is zero; direct `Scribe nihil` prints `nihil`. A text value initialized with bare `nihil` prints `nihil` and compares equal to bare `nihil`. Equality between values of different nonnumeric types is false, inequality true. These compatibility rules keep the old parsing examples executable under the new integer input requirement.

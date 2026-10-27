@@ -50,10 +50,11 @@ lvalue              = identifier, { member-suffix } ;
 assignment-operator = "<-" | "⬅" | "aequalis" ;
 call-statement      = identifier, { member-suffix }, call-suffix ;
 
-print-statement     = "Scribe", print-argument, { ",", print-argument } ;
-print-argument      = "-", string-literal | print-expression ;
-(* This partition admits compound expressions, but not a bare string with
-   any number of surrounding parentheses. No prose-only exclusion is needed. *)
+print-statement     = "Scribe", first-print-argument, { ",", print-argument } ;
+first-print-argument = "-", string-literal | print-expression ;
+print-argument      = [ "-", string-literal ] | print-expression ;
+(* print-expression has no bare-string primary; the first direct string must
+   use the marker. Later strings are handled by print-argument. *)
 print-expression    = additive, comparison-operator, additive | print-additive ;
 print-additive      = multiplicative, additive-operator, multiplicative,
                       { additive-operator, multiplicative }
@@ -66,9 +67,9 @@ print-power         = primary, power-operator, power-operand,
 print-primary       = ( decimal-integer | roman-integer | "Veritas" | "Falsus"
                       | "nihil" | identifier | "Legere"
                       | "(", print-expression, ")" ), { postfix-suffix } ;
-(* A complete '-' STRING print argument is preferentially a quotation,
-   rather than a numeric unary expression. Other compound expressions keep
-   the ordinary expression grammar; their types are checked in stage 2. *)
+(* A direct string as the first print argument requires the quotation marker.
+   Later direct string arguments may omit it; an optional marker remains valid.
+   Other compound expressions keep the ordinary expression grammar. *)
 
 read-statement      = "Legere", [ "in", identifier ] ;
 

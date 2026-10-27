@@ -5,4 +5,4 @@ nuntia structuram immutabilem Point quo <<
     >>;
 >>.
 immutabilis p <- Point cape 7.
-Scribe p.Get(nihil), - "/linea".
+Scribe p.Get(nihil), "/linea".

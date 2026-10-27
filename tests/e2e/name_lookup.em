@@ -9,4 +9,4 @@ nuntia structuram Box <<
     >>;
 >>.
 variabilis b <- Box cape nihil.
-Scribe b.Local(1), - ",", b.Field(nihil), - ",", Value, - "/linea".
+Scribe b.Local(1), ",", b.Field(nihil), ",", Value, "/linea".

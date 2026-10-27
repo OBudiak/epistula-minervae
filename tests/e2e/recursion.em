@@ -6,4 +6,4 @@ nuntia edictum Factorial quo cape integer n remitteque integer <<
         reditus n * Factorial(n - 1)!
     >>;
 >>.
-Scribe Factorial(5), - "/linea".
+Scribe Factorial(5), "/linea".

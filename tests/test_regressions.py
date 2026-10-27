@@ -119,9 +119,12 @@ class ParserTests(unittest.TestCase):
             parse("provisum Veritas <<\nScribe I;\n>>,\naliter <<\n>>.\n")
         self.assertEqual(caught.exception.message, "Clausula vacua esse non potest.")
 
-    def test_parentheses_cannot_bypass_quotation_marker(self):
+    def test_only_first_direct_string_needs_quotation_marker(self):
         with self.assertRaises(CompilationError):
             parse('Scribe (("text")).\n')
+        parse('Scribe Value, "text".\n')
+        with self.assertRaises(CompilationError):
+            parse('Scribe Value, ("text").\n')
 
     def test_strings_in_comparisons_are_not_printed_literals(self):
         parse('Scribe "text" idem Legere.\n')
@@ -134,7 +137,7 @@ class ParserTests(unittest.TestCase):
         self.assertFalse(program.statements[1].mutable)
 
     def test_string_escape_and_nihil_values(self):
-        program = parse('Scribe - "a/lineab//c", - "nihil".\n')
+        program = parse('Scribe - "a/lineab//c", "nihil".\n')
         values = [arg.value.value for arg in program.statements[0].arguments]
         self.assertEqual(values, ["a\nb/c", ""])
 

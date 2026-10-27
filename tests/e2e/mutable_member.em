@@ -10,4 +10,4 @@ nuntia structuram Counter <<
 >>.
 variabilis c <- Counter cape nihil.
 c.Inc(5).
-Scribe c > Get(nihil), - "/linea".
+Scribe c > Get(nihil), "/linea".

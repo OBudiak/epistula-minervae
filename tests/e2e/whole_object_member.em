@@ -7,4 +7,4 @@ nuntia structuram Box <<
 >>.
 variabilis b <- Box cape 1.
 b.Set(9).
-Scribe b.value, - "/linea".
+Scribe b.value, "/linea".
