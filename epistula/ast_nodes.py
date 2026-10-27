@@ -56,7 +56,7 @@ class ExprNode(ASTNode):
 @dataclass
 class VarDeclNode(StmtNode):
     keyword: str
-    type_name: str
+    type_name: str | None
     name: str
     mutable: bool
     initializer: ExprNode
@@ -79,9 +79,12 @@ class AssignmentNode(StmtNode):
     name: str
     operator: str
     value: ExprNode
+    target: ExprNode | None = None
 
     def dump_lines(self, depth: int = 0) -> list[str]:
         lines = [self._header(depth, "Assignment", name=self.name, operator=self.operator)]
+        if self.target is not None:
+            lines.extend(self.target.dump_lines(depth + 1))
         lines.extend(self.value.dump_lines(depth + 1))
         return lines
 
@@ -246,4 +249,148 @@ class ComparisonExprNode(ExprNode):
         lines = [self._header(depth, "ComparisonExpr", operator=self.operator)]
         lines.extend(self.left.dump_lines(depth + 1))
         lines.extend(self.right.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class ParameterNode(ASTNode):
+    type_name: str
+    name: str
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        return [self._header(depth, "Parameter", name=self.name, type=self.type_name)]
+
+
+@dataclass
+class ReturnNode(StmtNode):
+    value: ExprNode
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "Return")]
+        lines.extend(self.value.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class FunctionDeclNode(StmtNode):
+    name: str
+    parameters: list[ParameterNode]
+    result_type: str
+    body: list[StmtNode]
+    alternate: bool = False
+    constructor: bool = False
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "FunctionDecl", name=self.name,
+                              result_type=self.result_type, parameters=len(self.parameters),
+                              alternate=self.alternate, statements=len(self.body))]
+        if self.constructor:
+            lines[0] += " constructor=true"
+        for parameter in self.parameters:
+            lines.extend(parameter.dump_lines(depth + 1))
+        for statement in self.body:
+            lines.extend(statement.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class FieldDeclNode(ASTNode):
+    keyword: str
+    type_name: str | None
+    name: str
+    mutable: bool
+    initializer: ExprNode | None
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "FieldDecl", name=self.name, type=self.type_name,
+                              mutable=self.mutable, has_default=self.initializer is not None)]
+        if self.initializer is not None:
+            lines.extend(self.initializer.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class StructDeclNode(StmtNode):
+    name: str
+    immutable: bool
+    fields: list[FieldDeclNode]
+    methods: list[FunctionDeclNode]
+    nested: list[StructDeclNode] = field(default_factory=list)
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "StructDecl", name=self.name,
+                              immutable=self.immutable, fields=len(self.fields),
+                              methods=len(self.methods))]
+        for field_node in self.fields:
+            lines.extend(field_node.dump_lines(depth + 1))
+        for method in self.methods:
+            lines.extend(method.dump_lines(depth + 1))
+        for nested in self.nested:
+            lines.extend(nested.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class MemberAccessNode(ExprNode):
+    object: ExprNode
+    name: str
+    separator: str
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "MemberAccess", name=self.name,
+                              separator=self.separator)]
+        lines.extend(self.object.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class CallNode(ExprNode):
+    callee: ExprNode
+    arguments: list[ExprNode]
+    syntax: str
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "Call", arguments=len(self.arguments),
+                              syntax=self.syntax,
+                              ends_member_chain=isinstance(self.callee, MemberAccessNode))]
+        lines.extend(self.callee.dump_lines(depth + 1))
+        for argument in self.arguments:
+            lines.extend(argument.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class ConstructorArgNode(ASTNode):
+    name: str | None
+    value: ExprNode
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "ConstructorArg", name=self.name)]
+        lines.extend(self.value.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class ConstructorNode(ExprNode):
+    type_name: str
+    arguments: list[ConstructorArgNode]
+    syntax: str = "cape"
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "Constructor", type=self.type_name,
+                              arguments=len(self.arguments))]
+        if self.syntax == "novum":
+            lines[0] += ' syntax="novum"'
+        for argument in self.arguments:
+            lines.extend(argument.dump_lines(depth + 1))
+        return lines
+
+
+@dataclass
+class ExprStmtNode(StmtNode):
+    expression: ExprNode
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "ExprStmt")]
+        lines.extend(self.expression.dump_lines(depth + 1))
         return lines

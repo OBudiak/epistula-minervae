@@ -1,36 +1,25 @@
-IMPORTANT: THIS IS A TEMPLATE. COMPLETE EVERY [TODO] FIELD BEFORE SUBMISSION.
-An incomplete ai_usage.txt causes an automatic grade of 0 for this project stage.
+# AI usage disclosure for Stage 1
 
-1. AI tools used
-[TODO: List every AI tool and model used while designing, implementing, testing,
-or documenting the project. Include ChatGPT/Codex used to create this project.]
+Author: Oleksandr Budiak <obudiak@kse.org.ua>
 
-2. Links to chat transcripts
-[TODO: Add shareable links to every relevant chat transcript. Verify that the
-reviewer can open each link.]
+## Tool and transcript
 
-3. Prompts
-[TODO: Paste the prompts exactly as they were sent. Include the original task,
-the language-syntax descriptions, clarifications, and requests to generate or
-revise the implementation. Do not summarize prompts when the original text is
-available.]
+The author previously stated that ChatGPT was used to analyse the assignment, write code, and revise the language syntax. The author also stated that the core syntax idea was their own and was developed by answering ChatGPT's questions. The chat link previously supplied for this stage is:
 
-4. AI output used without changes
-[TODO: Identify files, code sections, grammar rules, tests, documentation, names,
-or design decisions that were accepted exactly as generated. If none, say so.]
+https://chatgpt.com/share/6ac54da7-b788-83eb-903c-d072a96786fb
 
-5. AI output changed by the student
-[TODO: For every material change, describe the original AI suggestion and what
-you changed yourself. Mention the affected files or functions.]
+The author must check that the reviewer can open this link without signing in and add any other Stage 1 chats or the exact prompts if this link does not cover all of the work.
 
-6. Student-authored work
-[TODO: Describe the parts designed or written independently, including any
-manual debugging, added tests, renamed constructs, or syntax decisions.]
+## Work covered
 
-7. Verification
-[TODO: Explain how you reviewed the generated code and grammar. Record the test
-command and result, plus any additional manual cases you ran.]
+The Stage 1 repository contains the language specification and EBNF, a hand-written byte-state-machine lexer, a recursive-descent parser and AST dump, constant-integer overflow checks, a test runner, golden cases and independent regression cases. The Git history includes separate commits for the design, lexer, parser, tests, fixes and documentation. The Stage 1 correction audit records grammar, associativity, range-check, scope, layout and diagnostic fixes.
 
-8. Final declaration
-[TODO: Add a truthful statement confirming that this file completely describes
-the AI assistance used for the submitted stage. Add your name and date.]
+## AI output accepted and changed
+
+The repository history does not establish which particular AI-generated files or code sections were accepted unchanged. The author must identify them after reviewing the linked transcript and the submitted diff. The author must also name material AI suggestions that they changed, the affected files or functions, and why they changed them. The statement above about the author's own syntax idea is the author's earlier description, not an attribution of every grammar rule.
+
+## Author's understanding and verification
+
+The author must add, in their own words, what they understood about any code they did not write independently, which tests they personally ran, and what they checked manually. `python3 tests/run_tests.py` is the repository's documented test command; this paragraph does not claim that the author ran it or that a particular run passed.
+
+This disclosure records facts recoverable from the prior author statement, link and repository. It still requires the author's review and additions above before being treated as complete.

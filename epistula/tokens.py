@@ -12,12 +12,16 @@ class TokenKind(Enum):
 
     TYPE_I32 = "32bitInt"
     TYPE_I64 = "64bitInt"
-    TYPE_BOOL = "sententia"
+    TYPE_INTEGER = "integer"
+    TYPE_DUPLEX = "duplex"
+    TYPE_BOOL = "ludicium"
+    TYPE_TEXT = "sententia"
     TRUE = "Veritas"
     FALSE = "Falsus"
     NIL = "nihil"
 
     MUTABLE = "variabilis"
+    FIELD_MUTABLE = "mutabilis"
     IMMUTABLE = "immutabilis"
     ETERNAL = "inaeternum"
     IF = "provisum"
@@ -25,6 +29,15 @@ class TokenKind(Enum):
     PRINT = "Scribe"
     READ = "Legere"
     IN = "in"
+    ANNOUNCE = "nuntia"
+    EDICT = "edictum"
+    STRUCT = "structuram"
+    IMMUTABLE_TYPE = "immutabilem"
+    QUO = "quo"
+    CAPE = "cape"
+    RESULT = "remitteque"
+    RETURN = "reditus"
+    NEW = "novum"
 
     ASSIGN = "assignment"
     EQ = "equality"
@@ -53,6 +66,8 @@ class TokenKind(Enum):
     DOT = "."
     SEMICOLON = ";"
     COMMA = ","
+    MEMBER = ">"
+    BANG = "!"
 
 
 @dataclass(frozen=True)

@@ -5,11 +5,15 @@ from .tokens import Token, TokenKind
 
 
 _KEYWORDS = {
-    "sententia": TokenKind.TYPE_BOOL,
+    "integer": TokenKind.TYPE_INTEGER,
+    "duplex": TokenKind.TYPE_DUPLEX,
+    "ludicium": TokenKind.TYPE_BOOL,
+    "sententia": TokenKind.TYPE_TEXT,
     "Veritas": TokenKind.TRUE,
     "Falsus": TokenKind.FALSE,
     "nihil": TokenKind.NIL,
     "variabilis": TokenKind.MUTABLE,
+    "mutabilis": TokenKind.FIELD_MUTABLE,
     "immutabilis": TokenKind.IMMUTABLE,
     "inaeternum": TokenKind.ETERNAL,
     "provisum": TokenKind.IF,
@@ -17,6 +21,15 @@ _KEYWORDS = {
     "Scribe": TokenKind.PRINT,
     "Legere": TokenKind.READ,
     "in": TokenKind.IN,
+    "nuntia": TokenKind.ANNOUNCE,
+    "edictum": TokenKind.EDICT,
+    "structuram": TokenKind.STRUCT,
+    "immutabilem": TokenKind.IMMUTABLE_TYPE,
+    "quo": TokenKind.QUO,
+    "cape": TokenKind.CAPE,
+    "remitteque": TokenKind.RESULT,
+    "reditus": TokenKind.RETURN,
+    "novum": TokenKind.NEW,
     "aequalis": TokenKind.ASSIGN,
     "idem": TokenKind.IDEM,
     "non": TokenKind.NON,
@@ -115,6 +128,8 @@ class Lexer:
                 0x2E: TokenKind.DOT,
                 0x3B: TokenKind.SEMICOLON,
                 0x2C: TokenKind.COMMA,
+                0x3E: TokenKind.MEMBER,
+                0x21: TokenKind.BANG,
             }
             kind = one_byte.get(current)
             if kind is not None:

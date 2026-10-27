@@ -1,32 +1,76 @@
-(* Epistula Minervae, stage 1. NEWLINE is a significant lexer token. *)
+(* Epistula Minervae, stage 2. NEWLINE is a significant lexer token. *)
 
 program             = { NEWLINE | top-statement }, EOF ;
 
-top-statement       = simple-statement, ".", line-end
-                    | if-statement, ".", line-end ;
+top-statement       = ( simple-statement | if-statement | function-declaration
+                      | alternate-function | structure-declaration ), ".", line-end ;
 
 block-statement     = simple-statement, ";", NEWLINE
-                    | if-statement, ";", NEWLINE ;
+                    | if-statement, ";", NEWLINE
+                    | return-statement, "!", NEWLINE ;
 
 simple-statement    = declaration
                     | assignment
                     | print-statement
-                    | read-statement ;
+                    | read-statement
+                    | call-statement ;
 
-declaration         = mutable-keyword, type, identifier, assignment-operator, expression
-                    | immutable-keyword, type, identifier, assignment-operator, expression ;
+declaration         = type, identifier, assignment-operator, expression
+                    | "variabilis", identifier, assignment-operator, expression
+                    | immutable-keyword, [ "variabilis" | type ], identifier,
+                      assignment-operator, expression
+                    | "variabilis", legacy-type, identifier, assignment-operator, expression ;
+legacy-type         = "32bitInt" | "64bitInt" | "sententia" ;
+(* The last branch preserves Stage 1 source programs; it is not the canonical
+   Stage 2 declaration. Explicit new types do not follow variabilis. *)
 
 mutable-keyword     = "variabilis" ;
 immutable-keyword   = "immutabilis" | "inaeternum" ;
-type                = "32bitInt" | "64bitInt" | "sententia" ;
+type                = "32bitInt" | "64bitInt" | "integer" | "duplex"
+                    | "ludicium" | "sententia" | qualified-name ;
+qualified-name      = identifier, { ".", identifier } ;
+result-type         = type | "nihil" ;
 
-assignment          = identifier, assignment-operator, expression ;
+function-declaration
+                    = "nuntia", "edictum", identifier, "quo", "cape",
+                      parameters, "remitteque", result-type,
+                      function-body ;
+alternate-function  = type, identifier, assignment-operator,
+                      "nuntia", "edictum", "quo", "cape", parameters,
+                      function-body ;
+function-body       = "<<", ">>" | "<<", NEWLINE, { NEWLINE }, [ block-body ], ">>" ;
+constructor-declaration
+                    = "nuntia", "edictum", identifier, "quo", "cape",
+                      parameters, function-body ;
+(* A constructor's identifier must equal its enclosing structure's name;
+   there is at most one constructor and it has no remitteque clause. *)
+parameters          = "nihil" | parameter, { ",", parameter } ;
+parameter           = type, identifier ;
+return-statement    = "reditus", expression ;
+
+structure-declaration
+                    = "nuntia", "structuram", [ "immutabilem" ], identifier,
+                      [ "quo" ], "<<", { NEWLINE | structure-item }, ">>" ;
+structure-item      = field-declaration, ";"
+                    | function-declaration, ";"
+                    | constructor-declaration, ";"
+                    | structure-declaration, "."
+                    | identifier, "<<", { NEWLINE | structure-item }, ">>", "." ;
+field-declaration   = ( "mutabilis" | immutable-keyword ), ( type | "variabilis" ),
+                      identifier, [ assignment-operator, expression ] ;
+(* A field without an initializer requires type; an inferred field requires an
+   initializer. This is checked by semantic analysis. *)
+
+assignment          = lvalue, assignment-operator, expression ;
+lvalue              = identifier, { member-suffix } ;
 assignment-operator = "<-" | "⬅" | "aequalis" ;
+call-statement      = identifier, { member-suffix }, call-suffix ;
 
-print-statement     = "Scribe", print-argument, { ",", print-argument } ;
-print-argument      = "-", string-literal | print-expression ;
-(* This partition admits compound expressions, but not a bare string with
-   any number of surrounding parentheses. No prose-only exclusion is needed. *)
+print-statement     = "Scribe", first-print-argument, { ",", print-argument } ;
+first-print-argument = "-", string-literal | print-expression ;
+print-argument      = [ "-" ], string-literal | print-expression ;
+(* print-expression has no bare-string primary; the first direct string must
+   use the marker. Later strings are handled by print-argument. *)
 print-expression    = additive, comparison-operator, additive | print-additive ;
 print-additive      = multiplicative, additive-operator, multiplicative,
                       { additive-operator, multiplicative }
@@ -36,12 +80,12 @@ print-multiplicative = unary, multiplicative-operator, unary,
 print-unary         = ( "+" | "-" ), unary | print-power ;
 print-power         = primary, power-operator, power-operand,
                       { power-operator, power-operand } | print-primary ;
-print-primary       = decimal-integer | roman-integer | "Veritas" | "Falsus"
-                    | "nihil" | identifier | "Legere"
-                    | "(", print-expression, ")" ;
-(* A complete '-' STRING print argument is preferentially a quotation,
-   rather than a numeric unary expression. Other compound expressions keep
-   the ordinary expression grammar; their types are checked in stage 2. *)
+print-primary       = ( decimal-integer | roman-integer | "Veritas" | "Falsus"
+                      | "nihil" | identifier | "Legere"
+                      | "(", print-expression, ")" ), { postfix-suffix } ;
+(* A direct string as the first print argument requires the quotation marker.
+   Later direct string arguments may omit it; an optional marker remains valid.
+   Other compound expressions keep the ordinary expression grammar. *)
 
 read-statement      = "Legere", [ "in", identifier ] ;
 
@@ -73,7 +117,8 @@ power               = primary, { power-operator, power-operand } ;
 power-operand       = ( "+" | "-" ), power-operand | primary ;
 power-operator      = "^" | "exponens" ;
 
-primary             = decimal-integer
+primary             = atom, { postfix-suffix } ;
+atom                = decimal-integer
                     | roman-integer
                     | "Veritas"
                     | "Falsus"
@@ -81,7 +126,25 @@ primary             = decimal-integer
                     | string-literal
                     | identifier
                     | "Legere"
+                    | new-expression
                     | "(", expression, ")" ;
+
+postfix-suffix      = member-suffix | call-suffix | constructor-suffix ;
+member-suffix       = ( "." | ">" ), identifier ;
+call-suffix         = "(", [ arguments | "nihil" ], ")"
+                    | "quo", "cape", ( arguments | "nihil" ) ;
+arguments           = expression, { ",", expression } ;
+constructor-suffix  = "cape", ( constructor-arguments | "nihil" ) ;
+constructor-arguments
+                    = constructor-argument, { ",", constructor-argument } ;
+constructor-argument
+                    = identifier, assignment-operator, expression | expression ;
+new-expression      = "novum", [ qualified-name, "quo", "cape" ],
+                      ( constructor-arguments | "nihil" ) ;
+(* Omitted type is supplied by the declaration, assignment target, parameter,
+   field, or function result. An inferred declaration needs the explicit type. *)
+(* A constructor suffix follows only a bare structure identifier. A bare
+   'nihil' in a call or constructor argument list means an empty list. *)
 
 line-end            = NEWLINE | EOF ;
 
@@ -131,6 +194,11 @@ byte-except-closing-parenthesis
      cannot be identifiers. All-Roman-symbol words are Roman tokens, and
      noncanonical forms are lexical errors, not identifiers.
    - 32bitInt and 64bitInt are whole-word tokens despite their initial digit.
+   - Stage 2 reserved words: integer, duplex, ludicium, sententia,
+     nuntia, edictum, structuram, immutabilem, quo, cape, remitteque,
+     reditus, mutabilis, novum. The Stage 1 spelling sententia remains accepted
+     for a legacy prefixed boolean declaration with a boolean initializer;
+     unprefixed declarations, fields, parameters and results use it for text.
    - A decimal literal's magnitude must be <= 9223372036854775808; the upper
      boundary can occur as the operand of a negative sign for INT64_MIN.
      Leading zeros are unrestricted. An adjacent letter/underscore after
@@ -138,4 +206,7 @@ byte-except-closing-parenthesis
    - No expression or simple statement spans NEWLINE outside string literals
      and block comments. EOF may replace the final top-level line ending.
    - Constant overflow is a separate required range check, not grammar.
+   - '.' is a member separator only when immediately followed by an
+     identifier token; otherwise it terminates a top-level statement.
+   - '>' is a member separator; '>>' closes a block by longest match.
 *)
