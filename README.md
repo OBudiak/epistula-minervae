@@ -1,173 +1,85 @@
 # Epistula Minervae
 
-**Epistula Minervae** is a small, statically typed educational language with Latin keywords, Roman integer literals, textual operator aliases and sentence-like punctuation. This repository contains stage 1 of the *Languages and Compilers Design* course project: the language design, a hand-written byte-state-machine lexer, a hand-written recursive-descent parser, an AST hierarchy and golden tests.
+Epistula Minervae is a small, statically typed language with Latin keywords, Roman integer literals, textual operator aliases, and sentence-like punctuation. Its hand-written byte-state-machine lexer and recursive-descent parser produce an AST. A separate semantic pass checks names and types before `llvmlite.ir` builders generate LLVM IR. The compiler keeps the Stage 1 `--ast` command.
 
-No third-party Python packages, lexer generators or parser generators are used.
+## Build and run
 
-## Requirements
-
-- Python 3.10 or newer;
-- a UTF-8 terminal for the `⬅` assignment operator.
-
-There is no build step. From the repository root, run:
+On Linux or WSL, install Python 3.12, `llc`, and `clang`, then create a local environment with `llvmlite`:
 
 ```bash
-python3 compiler.py --ast path/to/program.em
+python3 -m venv .venv
+.venv/bin/python -m pip install llvmlite
+.venv/bin/python compiler.py --ast program.em
+.venv/bin/python compiler.py program.em program.ll
+llc -relocation-model=pic -filetype=obj program.ll -o program.o
+clang program.o -o program
+./program
+.venv/bin/python tests/run_tests.py
 ```
 
-The AST is written to standard output. On a lexical or syntax error, standard output stays empty, the process returns a non-zero code, and standard error contains one line:
+The code-generation command writes only the module printed by the builder to `program.ll`. `llc` turns it into an object file; `clang` links `printf` and `scanf` from the C library. A lexical, syntax, or semantic error gives a nonzero exit code, no output file, and exactly one standard-error line: `compilation error: line L:C: message`. Input and output use UTF-8. Source columns count bytes from 1.
+
+## Existing syntax and types
+
+The original `32bitInt` and `64bitInt` are signed integers. `integer` and `duplex` are their 32-bit and 64-bit aliases. `ludicium` is boolean, with `Veritas` and `Falsus`. `sententia` is the text type. For Stage 1 compatibility, a declaration spelled `sententia` with a clearly boolean initializer still has the old boolean meaning; in new parameter and result declarations `sententia` means text. `fractio` is not part of this stage.
 
 ```text
-compilation error: line L:C: message
+variabilis Count <- XV.
+immutabilis integer Limit <- 100.
+variabilis ludicium Enabled <- Veritas.
+variabilis sententia Greeting <- "Salve".
 ```
 
-## Language overview
+An ordinary variable or field can omit its type when its initializer has a definite type. A field without an initializer needs an explicit type. `nihil` alone cannot infer a declared type. `variabilis` makes a mutable binding; `immutabilis` and `inaeternum` are immutable synonyms. The old explicit declarations remain valid. Names are declared before use, at most once per scope; an inner block may shadow an outer binding.
 
-The complete specification is in [`docs/language-specification.md`](docs/language-specification.md), and the exact grammar is in [`grammar.ebnf`](grammar.ebnf).
+Decimal or canonical Roman integer literals are accepted. Arithmetic uses `+`/`adde`, `-`/`subtrahe`, `*`/`multiplica`, `/`/`divide`, `%`/`diviso integra`, and `^`/`exponens`. Operators of one precedence level associate left, including exponentiation. Integer division truncates toward zero; a statically known zero divisor is a compilation error. Equality is `o-o`/`idem` and inequality is `oxo`/`non idem`. `provisum`, `aliter provisum`, and `aliter` form nonempty conditional blocks; the condition must be `ludicium`. Assignment uses `<-`, `⬅`, or `aequalis`.
 
-### Types and declarations
+The two integer widths are compatible in either direction. Widening sign-extends. A compile-time integer expression outside its target width is a compilation error, including an overflowing intermediate constant result. A nonconstant `duplex` narrowed to `integer` keeps its low 32 bits, interpreted as a signed integer. This rule is exercised by `tests/e2e/narrowing_runtime.em`.
 
-The integer types are `32bitInt` and `64bitInt`; `sententia` is the boolean type. `variabilis` creates a mutable variable. `immutabilis` and `inaeternum` create an immutable variable.
+## Functions
 
-```text
-variabilis 32bitInt Count <- 100.
-immutabilis 64bitInt Limen <- MMM.
-inaeternum sententia Enabled <- Veritas.
-```
-
-Integers may use decimal or canonical Roman notation. `Veritas`, `Falsus` and `nihil` are literals. Constant integer initializers and assignments are checked against the declared 32-bit or 64-bit range.
-
-### Assignment and arithmetic
-
-`<-`, `⬅` and `aequalis` are equivalent assignment operators.
+`nuntia edictum` declares a function with typed parameters and a result type. `cape nihil` means no parameters; `remitteque nihil` means no result. `reditus expression!` returns a value; a no-result function may use `reditus nihil!`. A value-returning function must return on every path. A function body sees its parameters and locals, global values declared earlier, and all function signatures. Functions may call themselves or a function declared later. Their names are prefixed in LLVM IR so `main` and `printf` are available as source names without colliding with runtime symbols.
 
 ```text
-Count <- XI.
-Count ⬅ Count + I.
-Count aequalis (Count adde V) * II.
-```
-
-Arithmetic operators have symbolic and textual spellings:
-
-| Operation | Symbol | Word form |
-|---|---|---|
-| addition | `+` | `adde` |
-| subtraction | `-` | `subtrahe` |
-| multiplication | `*` | `multiplica` |
-| division | `/` | `divide` |
-| remainder | `%` | `diviso integra` |
-| exponentiation | `^` | `exponens` |
-
-The two forms can be mixed and have the same precedence. All binary arithmetic operators, including exponentiation, are left-associative: `2 ^ 3 ^ 2` is `(2 ^ 3) ^ 2`. Integer division truncates towards zero, and remainder uses the same quotient.
-
-### Comparisons
-
-`o-o`/`idem` mean equality. `oxo`/`non idem` mean inequality.
-
-```text
-variabilis sententia Equal <- X o-o 10.
-variabilis sententia Different <- X non idem XI.
-```
-
-### Conditions
-
-Blocks use `<<` and `>>` and must contain at least one statement. `aliter provisum` and `aliter` are optional.
-
-```text
-provisum Count idem X <<
-    Scribe Count;
->>,
-aliter provisum Count idem XV <<
-    Scribe 15;
->>,
-aliter <<
-    Scribe nihil;
+nuntia edictum Add quo cape integer A, integer B remitteque integer <<
+    reditus A + B!
 >>.
+Scribe Add(20, 22), - "/linea".
 ```
 
-Top-level statements end with `.`, statements nested in a block end with `;`, and `,` connects branches belonging to the same conditional.
+The alternative `integer Double <- nuntia edictum quo cape integer X << ... >>.` declares the same kind of function: `Double` is its name and `integer` its result type. Calls are expressions and accept either `Add(20, 22)` or `Add quo cape 20, 22`; empty calls are `F(nihil)` or `F quo cape nihil`. Calls can nest. When a call is a whole statement, it ends with `.` at top level or `;` in a block; calls inside another expression have no separate terminator. Argument count and each argument type are checked before IR generation.
 
-### Input and output
+## Structures and member functions
 
-`Legere` may be a statement, may store into a variable, or may appear as an expression. A direct text argument to `Scribe` has a mandatory quotation marker `-`.
+`nuntia structuram` declares ordered fields. A field declared `immutabilis` cannot be assigned after construction. A field initializer is evaluated for each constructed object when that field is omitted; it may read earlier fields in declaration order. Construction accepts positional and named values together. A named value fills its field; each positional value fills the first unfilled field. Missing required fields, duplicates, unknown fields, and extra values are errors.
 
 ```text
-Legere.
-Legere in Count.
-Count <- Legere.
-Scribe - "Valor: ", Count, - "/linea".
+nuntia structuram Point <<
+    variabilis integer x;
+    immutabilis integer y <- x + 1;
+>>.
+variabilis p <- Point cape 3.
+variabilis q <- Point cape y <- 5, 2.
+Scribe p, - "/linea".
 ```
 
-The sequence `/linea` is a newline inside text, and `//` represents a slash. The special text `"nihil"` is an empty string.
+Fields and methods use `.` or `>`; the separators may mix, as in `p.center > x`. Assignment through a chain requires the starting object and every field on the path to be mutable. `immutabilis Point p <- ...` makes that object and nested paths immutable. `nuntia structuram immutabilem Name quo << ... >>.` makes every object of the type immutable.
 
-### Comments
+A member function is declared inside a structure with `nuntia edictum` and is called on an object: `p.Distance quo cape nihil` or `p > Distance(nihil)`. Its fields and other members are visible by name. Name lookup inside a member checks parameters and locals, then fields, then globals. `hoc` names the current object inside a member; `hoc <- Point cape ...` replaces it. A member is mutating when it writes the current object or a field, or calls another member that does so. Calling a mutating member on an immutable object is an error.
+
+## Input and output
+
+`Legere` reads one integer from standard input. It is an expression, a statement, or `Legere in Name`. `Scribe` prints its arguments in order without inserting separators or a newline. It accepts integers, booleans (`true`/`false`), text, `nihil`, and structures. A direct string literal in `Scribe` retains the Stage 1 quotation marker `-`; `/linea` inside text produces a newline. An object prints as `Type{field=value, other=value}` in field declaration order, recursively for nested objects.
 
 ```text
-N.B. A line comment.
-(N.B. A comment that may
-continue on another line.)
+variabilis A <- Legere.
+Scribe - "Value: ", A, - "/linea".
 ```
 
-## AST format
+The special string literal `"nihil"` is empty text. For legacy Stage 1 integer values initialized with bare `nihil`, the stored numeric value is zero; direct `Scribe nihil` prints `nihil`. A text value initialized with bare `nihil` prints `nihil` and compares equal to bare `nihil`. Equality between values of different nonnumeric types is false, inequality true. These compatibility rules keep the old parsing examples executable under the new integer input requirement.
 
-Every AST node includes the source position of its originating token. Dumps include declaration mutability and type, source operator spelling, literal notation and value, branch flags and child counts. Indentation represents tree depth. The format is stable and is covered by golden tests.
+## Grammar, tests, and disclosure
 
-Example:
+[`grammar.ebnf`](grammar.ebnf) defines the Stage 1 and Stage 2 syntax and lexical rules. [`docs/language-specification.md`](docs/language-specification.md) contains the full language specification. The test runner checks Stage 1 AST golden files, Stage 2 AST fields, lexical and syntax errors, semantic errors, independent regression assertions, and programs compiled through `.ll` to exact expected output. `tests/e2e/input_sum.in` supplies standard input without echoing it. In particular, positive and negative cases cover call count and type, return type, field existence, constructor completeness, constant chains, and mutating member calls.
 
-```text
-Program @1:1 statements=1
-  VarDecl @1:1 name="Count" type="32bitInt" mutable=true keyword="variabilis"
-    IntegerLiteral @1:30 text="XXXV" value=35 notation="roman"
-```
-
-## Running the tests
-
-Run all positive and negative golden tests:
-
-```bash
-python3 tests/run_tests.py
-```
-
-The suite contains 28 valid programs and 42 invalid/range-error programs (70 golden tests), plus 32 independent regression tests. Every valid `.em` file has a matching `.ast` dump. Every invalid `.em` file has a matching `.err` file. The runner checks minimum test counts, applies per-process timeouts, reports failed cases and returns a non-zero status if anything differs. The independent tests include all 3999 canonical Roman literals, exact integer boundaries, scope isolation, arithmetic precedence, byte positions, invalid UTF-8, CR/LF/CRLF, deep inputs and CLI output/error contracts.
-
-`tests/generate_expected.py` is a maintainer-only helper for deliberately refreshing golden files after reviewing an intentional AST or diagnostic-format change.
-
-Do not regenerate expected files merely to make a failing test pass. The independent assertions in `tests/test_regressions.py` are handwritten oracles, not compiler-generated expectations.
-
-## Stage-1 boundaries
-
-This front end parses programs and dumps an AST; it does not execute `Scribe` or `Legere`. Per the assignment, full name resolution, mutability enforcement, type checking (including the boolean type of conditions) and code generation belong to the next stage. The required constant integer overflow check is implemented now, including intermediate results and assignment targets with known types. Block-local declarations do not leak to sibling or enclosing blocks.
-
-Input and output use UTF-8. Locations are 1-based byte columns, not Unicode character or visual tab columns. Newlines may be LF, CRLF or CR. A final top-level dot may be followed directly by EOF. Decimal literal magnitude is limited to `2^63` (the extra magnitude is needed for signed INT64_MIN). Oversized source literals and excessive recursion produce a single formatted error, not a Python traceback.
-
-## Repository structure
-
-```text
-compiler.py                       command-line entry point
-epistula/lexer.py                 byte-oriented state-machine lexer
-epistula/parser.py                recursive-descent parser
-epistula/ast_nodes.py             AST class hierarchy and dump format
-epistula/checks.py                constant integer overflow checks
-grammar.ebnf                      complete EBNF grammar
-docs/language-specification.md    language rules and examples
-tests/valid/                      valid sources and expected ASTs
-tests/invalid/                    invalid sources and expected errors
-tests/run_tests.py                test runner
-ai_usage.txt                      AI-use disclosure template
-```
-
-## Submission workflow
-
-Development is tracked on the `stage1` branch. Before submission:
-
-1. Complete every placeholder in `ai_usage.txt`.
-2. Push `main` and `stage1` to a new GitHub or GitLab repository.
-3. Add `vovaskochko` as a collaborator and wait until the invitation is accepted.
-4. Open a pull request from `stage1` into `main`, request review from `vovaskochko`, and do not merge it.
-5. Submit the repository URL, pull-request URL and the completed `ai_usage.txt` in Moodle.
-
-The archive is **not yet administratively ready to submit**: `ai_usage.txt` intentionally remains a template at the author's request. A missing or incomplete disclosure gives an automatic grade of 0. Repository creation, collaborator invitation/acceptance, PR review request and Moodle submission must be performed by the student; this project has not been pushed. The first-day invitation requirement cannot be retroactively fulfilled by local code changes.
-
-Existing commits were made with the explicitly generic local identity `Student <student@example.com>`. Configure your actual name/email before making your own commits. Do not misrepresent generated work as independent authorship.
-
-The correction audit and requirement-to-test mapping are in [`docs/audit.md`](docs/audit.md).
+`ai_usage_2.txt` must be completed by the author before submission with every tool, exact prompts or public full-chat links, accepted and changed output, reasons, and the author's own understanding. It is kept out of local commits at the author's request; it must be included in the final Stage 2 pull request and Moodle submission to receive a grade.
