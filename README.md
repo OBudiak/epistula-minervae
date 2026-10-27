@@ -271,8 +271,3 @@ syntax; Stage 2 cases use the current syntax.
 Paths are relative to `tests/`. Executable cases have `.em`, `.expected`, and
 optionally `.in`; runtime failures also have `.stderr` and `.exit`. Compiler
 failures have `.err`.
-
-`ai_usage_2.txt` must contain tools, exact prompts or public full-chat links,
-accepted and changed output, reasons, and the author's own understanding. The
-author currently keeps disclosure files outside local commits. The completed
-`ai_usage_2.txt` must be included in the final Stage 2 PR and Moodle submission.
