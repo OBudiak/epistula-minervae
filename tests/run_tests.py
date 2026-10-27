@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,17 +13,20 @@ COMPILER = ROOT / "compiler.py"
 TESTS = Path(__file__).resolve().parent
 
 
-def run_case(source: Path, expected: Path, should_succeed: bool) -> str | None:
-    completed = subprocess.run(
-        [sys.executable, str(COMPILER), "--ast", str(source)],
-        cwd=ROOT,
-        text=True,
-        encoding="utf-8",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        check=False,
-        timeout=10,
-    )
+def run_case(source: Path, expected: Path, should_succeed: bool,
+             semantic: bool = False) -> str | None:
+    with tempfile.TemporaryDirectory(prefix="epistula-error-") as directory:
+        output = Path(directory) / "rejected.ll"
+        command = ([sys.executable, str(COMPILER), str(source), str(output)]
+                   if semantic else
+                   [sys.executable, str(COMPILER), "--ast", str(source)])
+        completed = subprocess.run(
+            command, cwd=ROOT, text=True, encoding="utf-8",
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            check=False, timeout=10,
+        )
+        if semantic and output.exists():
+            return "compiler left an output file after a semantic error"
     expected_text = expected.read_text(encoding="utf-8")
 
     if should_succeed:
@@ -48,16 +52,55 @@ def run_case(source: Path, expected: Path, should_succeed: bool) -> str | None:
     return None
 
 
+def run_end_to_end(source: Path) -> str | None:
+    expected = source.with_suffix(".expected")
+    if not expected.exists():
+        return f"missing {expected.name}"
+    input_file = source.with_suffix(".in")
+    input_data = input_file.read_bytes() if input_file.exists() else b""
+    with tempfile.TemporaryDirectory(prefix="epistula-e2e-") as directory:
+        temporary = Path(directory)
+        llvm_file = temporary / "program.ll"
+        object_file = temporary / "program.o"
+        executable = temporary / "program"
+        commands = [
+            [sys.executable, str(COMPILER), str(source), str(llvm_file)],
+            ["llc", "-relocation-model=pic", "-filetype=obj",
+             str(llvm_file), "-o", str(object_file)],
+            ["clang", str(object_file), "-o", str(executable)],
+        ]
+        for command in commands:
+            try:
+                completed = subprocess.run(command, cwd=ROOT, capture_output=True,
+                                           timeout=15, check=False)
+            except FileNotFoundError:
+                return f"tool not found: {command[0]}"
+            if completed.returncode:
+                return (f"{command[0]} failed ({completed.returncode}): "
+                        f"{completed.stderr.decode('utf-8', 'replace').strip()}")
+        completed = subprocess.run([str(executable)], input=input_data,
+                                   capture_output=True, timeout=15, check=False)
+        if completed.returncode:
+            return f"program exited {completed.returncode}: {completed.stderr!r}"
+        if completed.stdout != expected.read_bytes():
+            return (f"output differs: expected {expected.read_bytes()!r}, "
+                    f"got {completed.stdout!r}")
+        if completed.stderr:
+            return f"unexpected stderr: {completed.stderr!r}"
+    return None
+
+
 def main() -> int:
     failures: list[str] = []
     total = 0
-    for directory_name, suffix, should_succeed in (
-        ("valid", ".ast", True),
-        ("invalid", ".err", False),
+    for directory_name, suffix, should_succeed, semantic in (
+        ("valid", ".ast", True, False),
+        ("invalid", ".err", False, False),
+        ("semantic_invalid", ".err", False, True),
     ):
         directory = TESTS / directory_name
         sources = sorted(directory.glob("*.em"))
-        if len(sources) < 15:
+        if directory_name in ("valid", "invalid") and len(sources) < 15:
             failures.append(f"{directory_name}: fewer than 15 source tests")
         for source in sources:
             total += 1
@@ -66,22 +109,35 @@ def main() -> int:
                 failures.append(f"{source.name}: missing {expected.name}")
                 continue
             try:
-                failure = run_case(source, expected, should_succeed)
+                failure = run_case(source, expected, should_succeed, semantic)
             except subprocess.TimeoutExpired:
                 failure = "compiler exceeded the 10-second test timeout"
             if failure is not None:
                 failures.append(f"{source.name}: {failure}")
 
-    if failures:
-        print(f"FAILED: {len(failures)} of {total} tests")
-        for failure in failures:
-            print(f"- {failure}")
-        return 1
-    print(f"OK: {total} tests passed")
+    end_to_end = sorted((TESTS / "e2e").glob("*.em"))
+    if len(end_to_end) < 10:
+        failures.append("e2e: fewer than 10 executable source tests")
+    if not any(source.with_suffix(".in").exists() for source in end_to_end):
+        failures.append("e2e: no input test with a .in file")
+    for source in end_to_end:
+        total += 1
+        try:
+            failure = run_end_to_end(source)
+        except subprocess.TimeoutExpired:
+            failure = "compile or run exceeded the 15-second timeout"
+        if failure is not None:
+            failures.append(f"{source.name}: {failure}")
     sys.path.insert(0, str(ROOT))
     suite = unittest.defaultTestLoader.discover(str(TESTS), pattern="test_*.py")
     result = unittest.TextTestRunner(verbosity=2).run(suite)
-    return 0 if result.wasSuccessful() else 1
+    if failures:
+        print(f"FAILED: {len(failures)} of {total} file tests")
+        for failure in failures:
+            print(f"- {failure}")
+    else:
+        print(f"OK: {total} file tests passed")
+    return 0 if not failures and result.wasSuccessful() else 1
 
 
 if __name__ == "__main__":

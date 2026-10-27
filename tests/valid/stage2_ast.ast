@@ -1,0 +1,15 @@
+Program @1:1 statements=3
+  StructDecl @1:1 name="Point" immutable=false fields=1 methods=1
+    FieldDecl @2:5 name="x" type="integer" mutable=true has_default=false
+    FunctionDecl @3:5 name="Get" result_type="integer" parameters=0 alternate=false statements=1
+      Return @4:9
+        Identifier @4:17 name="x"
+  VarDecl @7:1 name="p" type=null mutable=true keyword="variabilis"
+    Constructor @7:17 type="Point" arguments=1
+      ConstructorArg @7:28 name=null
+        IntegerLiteral @7:28 text="3" value=3 notation="decimal"
+  Print @8:1 arguments=1
+    PrintArgument @8:13 quoted=false
+      Call @8:13 arguments=0 syntax="parentheses" ends_member_chain=true
+        MemberAccess @8:9 name="Get" separator="."
+          Identifier @8:8 name="p"
