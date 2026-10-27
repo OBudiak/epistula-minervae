@@ -76,6 +76,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if arguments.input is None or arguments.output is None:
                 raise CompilationError(1, 1, "Duo nomina fasciculorum exspectantur.")
+            if arguments.input.resolve() == arguments.output.resolve():
+                raise CompilationError(1, 1, "Fasciculus fontis et output diversi esse debent.")
+            try:
+                arguments.output.unlink(missing_ok=True)
+            except OSError as exc:
+                raise CompilationError(1, 1, "Fasciculus scribi non potest.") from exc
             output = compile_ir(arguments.input)
             try:
                 arguments.output.write_text(output, encoding="utf-8")

@@ -21,6 +21,7 @@ class TokenKind(Enum):
     NIL = "nihil"
 
     MUTABLE = "variabilis"
+    FIELD_MUTABLE = "mutabilis"
     IMMUTABLE = "immutabilis"
     ETERNAL = "inaeternum"
     IF = "provisum"
@@ -36,6 +37,7 @@ class TokenKind(Enum):
     CAPE = "cape"
     RESULT = "remitteque"
     RETURN = "reditus"
+    NEW = "novum"
 
     ASSIGN = "assignment"
     EQ = "equality"

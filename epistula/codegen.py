@@ -12,7 +12,8 @@ from .ast_nodes import (
     ReadExprNode, ReadStmtNode, ReturnNode, StmtNode, StringLiteralNode,
     StructDeclNode, UnaryExprNode, VarDeclNode,
 )
-from .semantics import BOOL, I32, I64, NIL, NUMERIC, TEXT, FunctionSymbol, SemanticAnalyzer
+from .semantics import BOOL, I32, I64, INPUT, NIL, NUMERIC, TEXT, FunctionSymbol, SemanticAnalyzer
+from .input_runtime import InputRuntime
 
 
 class CodeGenerator:
@@ -26,6 +27,8 @@ class CodeGenerator:
         self.i32 = ir.IntType(32)
         self.i64 = ir.IntType(64)
         self.i8p = self.i8.as_pointer()
+        self.input_type = self.context.get_identified_type("em_input")
+        self.input_type.set_body(self.i1, self.i64, self.i8p)
         self.struct_types = {
             name: self.context.get_identified_type(f"em_struct_{name}")
             for name in semantics.structs
@@ -46,6 +49,7 @@ class CodeGenerator:
         self.strcmp = ir.Function(
             self.module, ir.FunctionType(self.i32, [self.i8p, self.i8p]),
             name="strcmp")
+        self.input_runtime = InputRuntime(self)
 
     def llvm_type(self, type_name: str) -> ir.Type:
         if type_name == I32:
@@ -56,6 +60,8 @@ class CodeGenerator:
             return self.i1
         if type_name == TEXT:
             return self.i8p
+        if type_name == INPUT:
+            return self.input_type
         if type_name == NIL:
             return ir.VoidType()
         return self.struct_types[type_name]
@@ -72,11 +78,15 @@ class CodeGenerator:
         for symbol in self.sem.functions.values():
             self._declare_function(symbol)
         for struct in self.sem.structs.values():
+            if struct.constructor:
+                self._declare_function(struct.constructor)
             for symbol in struct.methods.values():
                 self._declare_function(symbol)
         for symbol in self.sem.functions.values():
             self._function_body(symbol)
         for struct in self.sem.structs.values():
+            if struct.constructor:
+                self._function_body(struct.constructor)
             for symbol in struct.methods.values():
                 self._function_body(symbol)
         main = ir.Function(self.module, ir.FunctionType(self.i32, []), name="main")
@@ -133,8 +143,7 @@ class CodeGenerator:
                 type_name = self.sem.globals[node.name].type_name
                 slot = self.global_ptrs[node.name]
             else:
-                type_name = (self.sem.canonical(node.type_name, node)
-                             if node.type_name else self.sem.expression_types[id(node.initializer)])
+                type_name = self.sem.variable_types[id(node)]
                 slot = self.builder.alloca(self.llvm_type(type_name), name=node.name)
                 self.scopes[-1][node.name] = slot
             value = self._value(node.initializer)
@@ -221,7 +230,7 @@ class CodeGenerator:
         if isinstance(node, StringLiteralNode):
             return self._string_pointer(node.value)
         if isinstance(node, ReadExprNode):
-            return self._read(I32)
+            return self._read(type_name)
         if isinstance(node, (IdentifierNode, MemberAccessNode)):
             return self.builder.load(self._address(node))
         if isinstance(node, ConstructorNode):
@@ -232,7 +241,8 @@ class CodeGenerator:
             if (node.operator == "-" and isinstance(node.operand, IntegerLiteralNode)
                     and node.operand.value == 2**63):
                 return ir.Constant(self.i64, -(2**63))
-            operand = self._value(node.operand)
+            operand = self._cast(self._value(node.operand),
+                                 self.sem.expression_types[id(node.operand)], type_name)
             return operand if node.operator == "+" else self.builder.neg(operand)
         if isinstance(node, BinaryExprNode):
             left_type = self.sem.expression_types[id(node.left)]
@@ -247,8 +257,10 @@ class CodeGenerator:
             if operator in ("*", "multiplica"):
                 return self.builder.mul(left, right)
             if operator in ("/", "divide"):
+                self._guard_division(left, right, type_name)
                 return self.builder.sdiv(left, right)
             if operator in ("%", "diviso integra"):
+                self._guard_division(left, right, type_name)
                 return self.builder.srem(left, right)
             if operator in ("^", "exponens"):
                 return self.builder.call(self._power_function(type_name), [left, right])
@@ -256,10 +268,75 @@ class CodeGenerator:
             return self._comparison(node)
         raise TypeError(type(node).__name__)
 
+    def _guard_division(self, left, right, type_name):
+        zero = ir.Constant(self.llvm_type(type_name), 0)
+        minimum = ir.Constant(self.llvm_type(type_name), -(2**(63 if type_name == I64 else 31)))
+        negative_one = ir.Constant(self.llvm_type(type_name), -1)
+        nonzero = self.builder.icmp_signed("!=", right, zero)
+        overflow = self.builder.and_(self.builder.icmp_signed("==", left, minimum),
+                                     self.builder.icmp_signed("==", right, negative_one))
+        self.input_runtime.guard(self.builder.and_(nonzero, self.builder.not_(overflow)),
+                                 "invalid integer division")
+
+    def _input_comparison(self, node, left_type, right_type, equality):
+        left, right = self._value(node.left), self._value(node.right)
+        if left_type not in NUMERIC | {INPUT, TEXT, NIL} or right_type not in NUMERIC | {INPUT, TEXT, NIL}:
+            return ir.Constant(self.i1, int(not equality))
+        left = self._cast(left, left_type, INPUT)
+        right = self._cast(right, right_type, INPUT)
+        left_tag, right_tag = self.builder.extract_value(left, 0), self.builder.extract_value(right, 0)
+        same = self.builder.function.append_basic_block("input_same_type")
+        different = self.builder.function.append_basic_block("input_different_type")
+        numeric = self.builder.function.append_basic_block("input_numeric_compare")
+        text = self.builder.function.append_basic_block("input_text_compare")
+        done = self.builder.function.append_basic_block("input_compare_end")
+        self.builder.cbranch(self.builder.icmp_unsigned("==", left_tag, right_tag), same, different)
+        self.builder.position_at_end(different)
+        self.builder.branch(done)
+        self.builder.position_at_end(same)
+        self.builder.cbranch(left_tag, numeric, text)
+        self.builder.position_at_end(numeric)
+        numbers_equal = self.builder.icmp_signed(
+            "==", self.builder.extract_value(left, 1), self.builder.extract_value(right, 1))
+        self.builder.branch(done)
+        self.builder.position_at_end(text)
+        texts_equal = self._text_equal(self.builder.extract_value(left, 2),
+                                       self.builder.extract_value(right, 2))
+        text_end = self.builder.block
+        self.builder.branch(done)
+        self.builder.position_at_end(done)
+        result = self.builder.phi(self.i1)
+        result.add_incoming(ir.Constant(self.i1, 0), different)
+        result.add_incoming(numbers_equal, numeric)
+        result.add_incoming(texts_equal, text_end)
+        return result if equality else self.builder.not_(result)
+
+    def _text_equal(self, left, right):
+        left_null = self.builder.icmp_unsigned("==", left, ir.Constant(self.i8p, None))
+        right_null = self.builder.icmp_unsigned("==", right, ir.Constant(self.i8p, None))
+        null_block = self.builder.function.append_basic_block("text_null")
+        compare_block = self.builder.function.append_basic_block("text_compare")
+        end_block = self.builder.function.append_basic_block("text_equal_end")
+        self.builder.cbranch(self.builder.or_(left_null, right_null), null_block, compare_block)
+        self.builder.position_at_end(null_block)
+        null_equal = self.builder.and_(left_null, right_null)
+        self.builder.branch(end_block)
+        self.builder.position_at_end(compare_block)
+        result = self.builder.call(self.strcmp, [left, right])
+        compared = self.builder.icmp_signed("==", result, ir.Constant(self.i32, 0))
+        self.builder.branch(end_block)
+        self.builder.position_at_end(end_block)
+        equal = self.builder.phi(self.i1)
+        equal.add_incoming(null_equal, null_block)
+        equal.add_incoming(compared, compare_block)
+        return equal
+
     def _comparison(self, node: ComparisonExprNode) -> ir.Value:
         left_type = self.sem.expression_types[id(node.left)]
         right_type = self.sem.expression_types[id(node.right)]
         equality = node.operator in ("o-o", "idem")
+        if INPUT in (left_type, right_type):
+            return self._input_comparison(node, left_type, right_type, equality)
         if left_type == NIL and right_type == NIL:
             return ir.Constant(self.i1, int(equality))
         if left_type == NIL or right_type == NIL:
@@ -286,24 +363,7 @@ class CodeGenerator:
                 "==" if equality else "!=", self._value(node.left), self._value(node.right))
         if left_type == right_type == TEXT:
             left, right = self._value(node.left), self._value(node.right)
-            left_null = self.builder.icmp_unsigned("==", left, ir.Constant(self.i8p, None))
-            right_null = self.builder.icmp_unsigned("==", right, ir.Constant(self.i8p, None))
-            either_null = self.builder.or_(left_null, right_null)
-            null_block = self.builder.function.append_basic_block("text_null")
-            compare_block = self.builder.function.append_basic_block("text_compare")
-            end_block = self.builder.function.append_basic_block("text_equal_end")
-            self.builder.cbranch(either_null, null_block, compare_block)
-            self.builder.position_at_end(null_block)
-            null_equal = self.builder.and_(left_null, right_null)
-            self.builder.branch(end_block)
-            self.builder.position_at_end(compare_block)
-            result = self.builder.call(self.strcmp, [left, right])
-            compared = self.builder.icmp_signed("==", result, ir.Constant(self.i32, 0))
-            self.builder.branch(end_block)
-            self.builder.position_at_end(end_block)
-            equal = self.builder.phi(self.i1)
-            equal.add_incoming(null_equal, null_block)
-            equal.add_incoming(compared, compare_block)
+            equal = self._text_equal(left, right)
             return equal if equality else self.builder.not_(equal)
         self._value(node.left)
         self._value(node.right)
@@ -312,19 +372,34 @@ class CodeGenerator:
     def _constructor(self, node: ConstructorNode) -> ir.Value:
         struct = self.sem.structs[node.type_name]
         slot = self.builder.alloca(self.struct_types[node.type_name])
-        bound = self.sem.constructor_fields[id(node)]
+        self.builder.store(ir.Constant(self.struct_types[node.type_name], None), slot)
+        # Evaluate supplied arguments in their source order and caller scope.
+        values = {id(argument.value): self._value(argument.value) for argument in node.arguments}
+        bound = self.sem.constructor_fields.get(id(node), {})
         previous_struct, previous_self = self.current_struct, self.self_pointer
+        previous_scopes = self.scopes
         try:
             self.current_struct, self.self_pointer = node.type_name, slot
+            self.scopes = [self.global_ptrs]
             for field in struct.fields:
-                expression = bound[field.name] or field.initializer
-                value = self._value(expression)
+                expression = bound.get(field.name) or field.initializer
+                if expression is None:
+                    continue
+                value = values[id(expression)] if id(expression) in values else self._value(expression)
                 from_type = self.sem.expression_types[id(expression)]
                 pointer = self.builder.gep(slot, [ir.Constant(self.i32, 0),
                                                   ir.Constant(self.i32, field.index)])
                 self.builder.store(self._cast(value, from_type, field.type_name), pointer)
         finally:
             self.current_struct, self.self_pointer = previous_struct, previous_self
+            self.scopes = previous_scopes
+        if struct.constructor:
+            symbol = struct.constructor
+            args = [slot]
+            for expression, expected in zip(self.sem.constructor_arguments[id(node)], symbol.parameter_types):
+                args.append(self._cast(values[id(expression)],
+                                       self.sem.expression_types[id(expression)], expected))
+            self.builder.call(self.functions[(symbol.owner, symbol.name)], args)
         return self.builder.load(slot)
 
     def _call(self, node: CallNode) -> ir.Value | None:
@@ -388,6 +463,10 @@ class CodeGenerator:
             return ir.Constant(self.llvm_type(expected), None)
         if actual == expected:
             return value
+        if actual == INPUT:
+            return self.input_runtime.convert(value, expected)
+        if expected == INPUT:
+            return self.input_runtime.box(value, actual)
         if actual == I32 and expected == I64:
             return self.builder.sext(value, self.i64)
         if actual == I64 and expected == I32:
@@ -395,10 +474,7 @@ class CodeGenerator:
         return value
 
     def _read(self, type_name: str) -> ir.Value:
-        slot = self.builder.alloca(self.llvm_type(type_name))
-        fmt = "%lld" if type_name == I64 else "%d"
-        self.builder.call(self.scanf, [self._string_pointer(fmt), slot])
-        return self.builder.load(slot)
+        return self.input_runtime.read(type_name)
 
     def _print_text(self, text: str) -> None:
         self.builder.call(self.printf, [self._string_pointer("%s"),
@@ -412,7 +488,19 @@ class CodeGenerator:
         self._print_loaded(value, type_name)
 
     def _print_loaded(self, value: ir.Value, type_name: str) -> None:
-        if type_name == I32:
+        if type_name == INPUT:
+            numeric = self.builder.function.append_basic_block("print_input_number")
+            text = self.builder.function.append_basic_block("print_input_text")
+            done = self.builder.function.append_basic_block("print_input_end")
+            self.builder.cbranch(self.builder.extract_value(value, 0), numeric, text)
+            self.builder.position_at_end(numeric)
+            self._print_loaded(self.builder.extract_value(value, 1), I64)
+            self.builder.branch(done)
+            self.builder.position_at_end(text)
+            self._print_loaded(self.builder.extract_value(value, 2), TEXT)
+            self.builder.branch(done)
+            self.builder.position_at_end(done)
+        elif type_name == I32:
             self.builder.call(self.printf, [self._string_pointer("%d"), value])
         elif type_name == I64:
             self.builder.call(self.printf, [self._string_pointer("%lld"), value])

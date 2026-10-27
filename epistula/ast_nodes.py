@@ -278,11 +278,14 @@ class FunctionDeclNode(StmtNode):
     result_type: str
     body: list[StmtNode]
     alternate: bool = False
+    constructor: bool = False
 
     def dump_lines(self, depth: int = 0) -> list[str]:
         lines = [self._header(depth, "FunctionDecl", name=self.name,
                               result_type=self.result_type, parameters=len(self.parameters),
                               alternate=self.alternate, statements=len(self.body))]
+        if self.constructor:
+            lines[0] += " constructor=true"
         for parameter in self.parameters:
             lines.extend(parameter.dump_lines(depth + 1))
         for statement in self.body:
@@ -312,6 +315,7 @@ class StructDeclNode(StmtNode):
     immutable: bool
     fields: list[FieldDeclNode]
     methods: list[FunctionDeclNode]
+    nested: list[StructDeclNode] = field(default_factory=list)
 
     def dump_lines(self, depth: int = 0) -> list[str]:
         lines = [self._header(depth, "StructDecl", name=self.name,
@@ -321,6 +325,8 @@ class StructDeclNode(StmtNode):
             lines.extend(field_node.dump_lines(depth + 1))
         for method in self.methods:
             lines.extend(method.dump_lines(depth + 1))
+        for nested in self.nested:
+            lines.extend(nested.dump_lines(depth + 1))
         return lines
 
 
@@ -368,10 +374,13 @@ class ConstructorArgNode(ASTNode):
 class ConstructorNode(ExprNode):
     type_name: str
     arguments: list[ConstructorArgNode]
+    syntax: str = "cape"
 
     def dump_lines(self, depth: int = 0) -> list[str]:
         lines = [self._header(depth, "Constructor", type=self.type_name,
                               arguments=len(self.arguments))]
+        if self.syntax == "novum":
+            lines[0] += ' syntax="novum"'
         for argument in self.arguments:
             lines.extend(argument.dump_lines(depth + 1))
         return lines
