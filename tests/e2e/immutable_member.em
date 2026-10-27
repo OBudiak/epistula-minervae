@@ -4,5 +4,5 @@ nuntia structuram immutabilem Point quo <<
         reditus x!
     >>;
 >>.
-immutabilis p <- Point cape 7.
+immutabilis p <- novum Point quo cape 7.
 Scribe p.Get(nihil), "/linea".

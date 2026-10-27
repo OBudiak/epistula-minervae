@@ -1,4 +1,4 @@
 nuntia structuram Point <<
-    variabilis integer x;
+    mutabilis integer x;
 >>.
-variabilis p <- Point cape x <- 1, x <- 2.
+variabilis p <- novum Point quo cape x <- 1, x <- 2.

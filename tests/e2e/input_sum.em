@@ -1,3 +1,3 @@
-variabilis integer A <- Legere.
-variabilis integer B <- Legere.
+integer A <- Legere.
+integer B <- Legere.
 Scribe A + B, "/linea".

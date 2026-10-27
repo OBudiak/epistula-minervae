@@ -1,5 +1,5 @@
 nuntia structuram Pair <<
-    variabilis integer x;
-    variabilis integer y;
+    mutabilis integer x;
+    mutabilis integer y;
 >>.
-variabilis p <- Pair cape 1.
+variabilis p <- novum Pair quo cape 1.

@@ -1,6 +1,6 @@
-variabilis integer Value <- 100.
+integer Value <- 100.
 nuntia structuram Box <<
-    variabilis integer Value <- 10;
+    mutabilis integer Value <- 10;
     nuntia edictum Local quo cape integer Value remitteque integer <<
         reditus Value!
     >>;
@@ -8,5 +8,5 @@ nuntia structuram Box <<
         reditus Value!
     >>;
 >>.
-variabilis b <- Box cape nihil.
+variabilis b <- novum Box quo cape nihil.
 Scribe b.Local(1), ",", b.Field(nihil), ",", Value, "/linea".

@@ -80,13 +80,16 @@ def run_end_to_end(source: Path) -> str | None:
                         f"{completed.stderr.decode('utf-8', 'replace').strip()}")
         completed = subprocess.run([str(executable)], input=input_data,
                                    capture_output=True, timeout=15, check=False)
-        if completed.returncode:
-            return f"program exited {completed.returncode}: {completed.stderr!r}"
+        exit_file, stderr_file = source.with_suffix(".exit"), source.with_suffix(".stderr")
+        expected_exit = int(exit_file.read_text()) if exit_file.exists() else 0
+        expected_stderr = stderr_file.read_bytes() if stderr_file.exists() else b""
+        if completed.returncode != expected_exit:
+            return f"expected exit {expected_exit}, got {completed.returncode}: {completed.stderr!r}"
         if completed.stdout != expected.read_bytes():
             return (f"output differs: expected {expected.read_bytes()!r}, "
                     f"got {completed.stdout!r}")
-        if completed.stderr:
-            return f"unexpected stderr: {completed.stderr!r}"
+        if completed.stderr != expected_stderr:
+            return f"stderr differs: expected {expected_stderr!r}, got {completed.stderr!r}"
     return None
 
 
@@ -120,7 +123,7 @@ def main() -> int:
         failures.append("e2e: fewer than 10 executable source tests")
     if not any(source.with_suffix(".in").exists() for source in end_to_end):
         failures.append("e2e: no input test with a .in file")
-    for source in end_to_end:
+    for source in end_to_end + sorted((TESTS / "runtime_invalid").glob("*.em")):
         total += 1
         try:
             failure = run_end_to_end(source)

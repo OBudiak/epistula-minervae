@@ -1,6 +1,6 @@
 nuntia structuram Pair <<
-    variabilis integer x;
-    variabilis integer y <- x + 1;
+    mutabilis integer x;
+    mutabilis integer y <- x + 1;
 >>.
-variabilis p <- Pair cape 4.
+variabilis p <- novum Pair quo cape 4.
 Scribe p, "/linea".

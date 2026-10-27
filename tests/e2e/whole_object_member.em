@@ -1,10 +1,10 @@
 nuntia structuram Box <<
-    variabilis integer value;
+    mutabilis integer value;
     nuntia edictum Set quo cape integer amount remitteque nihil <<
-        hoc <- Box cape amount;
+        hoc <- novum Box quo cape amount;
         reditus nihil!
     >>;
 >>.
-variabilis b <- Box cape 1.
+variabilis b <- novum Box quo cape 1.
 b.Set(9).
 Scribe b.value, "/linea".

@@ -1,4 +1,4 @@
-variabilis integer x <- 10.
+integer x <- 10.
 provisum x idem 10 <<
     Scribe - "yes";
 >>,

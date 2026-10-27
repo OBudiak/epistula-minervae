@@ -1,5 +1,5 @@
 nuntia structuram Counter <<
-    variabilis integer value <- 0;
+    mutabilis integer value <- 0;
     nuntia edictum Inc quo cape integer amount remitteque nihil <<
         value <- value + amount;
         reditus nihil!
@@ -8,6 +8,6 @@ nuntia structuram Counter <<
         reditus value!
     >>;
 >>.
-variabilis c <- Counter cape nihil.
+variabilis c <- novum Counter quo cape nihil.
 c.Inc(5).
 Scribe c > Get(nihil), "/linea".

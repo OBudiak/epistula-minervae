@@ -204,6 +204,30 @@ class OverflowTests(unittest.TestCase):
 
 
 class CLITests(unittest.TestCase):
+    def test_failed_ir_build_removes_stale_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source, output = Path(temporary) / "input.em", Path(temporary) / "output.ll"
+            source.write_text("Scribe Unknown.\n")
+            output.write_text("stale IR")
+            completed = subprocess.run([sys.executable, str(ROOT / "compiler.py"),
+                                        str(source), str(output)], capture_output=True, timeout=10)
+            self.assertEqual(completed.returncode, 1)
+            self.assertEqual(completed.stdout, b"")
+            self.assertEqual(completed.stderr,
+                             b"compilation error: line 1:8: Nomen 'Unknown' ignotum est.\n")
+            self.assertFalse(output.exists())
+
+    def test_ir_output_cannot_overwrite_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "input.em"
+            original = "integer Number <- 1.\n"
+            source.write_text(original)
+            completed = subprocess.run([sys.executable, str(ROOT / "compiler.py"),
+                                        str(source), str(source)], capture_output=True, timeout=10)
+            self.assertEqual(completed.returncode, 1)
+            self.assertEqual(source.read_text(), original)
+            self.assertEqual(completed.stderr.count(b"\n"), 1)
+
     def run_cli(self, source: bytes):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "input.em"
