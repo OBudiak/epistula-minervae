@@ -102,6 +102,29 @@ def run_end_to_end(source: Path, expected: Path | None = None, input_file: Path 
 def main() -> int:
     failures: list[str] = []
     total = 0
+    # Count actual invocations, including both modes and optimizer AST checks.
+    fixture_groups = (("valid", ".ast"), ("invalid", ".err"),
+                      ("semantic_invalid", ".err"))
+    planned = sum(
+        1 + source.with_suffix(suffix).exists()
+        for directory, suffix in fixture_groups
+        for source in (TESTS / directory).glob("*.em")
+    )
+    planned += 2 * sum(len(list((TESTS / directory).glob("*.em")))
+                       for directory in ("e2e", "runtime_invalid"))
+    planned += 3 * len(list((TESTS / "optimizer").glob("*.em")))
+    planned += 4  # Two matrix sessions, each in both modes.
+
+    interactive = sys.stdout.isatty()
+
+    def progress(label: str) -> None:
+        message = f"[{total}/{planned}] {label}"
+        if interactive:
+            print("\r" + message[:72].ljust(72), end="", flush=True)
+        elif total == 1 or total % 20 == 0 or total == planned:
+            print(message, flush=True)
+
+    print(f"Running {planned} file checks...", flush=True)
     for directory_name, suffix, should_succeed, semantic in (
         ("valid", ".ast", True, False),
         ("invalid", ".err", False, False),
@@ -113,6 +136,7 @@ def main() -> int:
             failures.append(f"{directory_name}: fewer than 15 source tests")
         for source in sources:
             total += 1
+            progress(f"{directory_name}: {source.name}")
             expected = source.with_suffix(suffix)
             if not expected.exists():
                 failures.append(f"{source.name}: missing {expected.name}")
@@ -124,6 +148,7 @@ def main() -> int:
             if failure is not None:
                 failures.append(f"{source.name}: {failure}")
             total += 1
+            progress(f"{directory_name}, optimized: {source.name}")
             try:
                 failure = run_case(source, expected, should_succeed, semantic, optimize=True)
             except subprocess.TimeoutExpired:
@@ -138,6 +163,7 @@ def main() -> int:
         failures.append("e2e: no input test with a .in file")
     for source in end_to_end + sorted((TESTS / "runtime_invalid").glob("*.em")):
         total += 1
+        progress(f"execution: {source.name}")
         try:
             failure = run_end_to_end(source)
         except subprocess.TimeoutExpired:
@@ -146,6 +172,7 @@ def main() -> int:
             failures.append(f"{source.name}: {failure}")
     for source in end_to_end + sorted((TESTS / "runtime_invalid").glob("*.em")):
         total += 1
+        progress(f"optimized execution: {source.name}")
         try:
             failure = run_end_to_end(source, optimize=True)
         except subprocess.TimeoutExpired:
@@ -154,12 +181,18 @@ def main() -> int:
             failures.append(f"{source.name} with --optimize: {failure}")
     for source in sorted((TESTS / "optimizer").glob("*.em")):
         total += 1
-        ast = subprocess.run([sys.executable, str(COMPILER), "--optimize", "--ast", str(source)],
-                             cwd=ROOT, text=True, encoding="utf-8", capture_output=True, timeout=10)
-        if ast.returncode or ast.stderr or ast.stdout != source.with_suffix(".ast").read_text(encoding="utf-8"):
-            failures.append(f"{source.name}: optimized AST differs or failed: {ast.stderr}")
+        progress(f"optimizer AST: {source.name}")
+        try:
+            ast = subprocess.run(
+                [sys.executable, str(COMPILER), "--optimize", "--ast", str(source)],
+                cwd=ROOT, text=True, encoding="utf-8", capture_output=True, timeout=10)
+            if ast.returncode or ast.stderr or ast.stdout != source.with_suffix(".ast").read_text(encoding="utf-8"):
+                failures.append(f"{source.name}: optimized AST differs or failed: {ast.stderr}")
+        except subprocess.TimeoutExpired:
+            failures.append(f"{source.name}: optimized AST exceeded the 10-second timeout")
         for optimized in (False, True):
             total += 1
+            progress(f"optimizer execution, optimize={optimized}: {source.name}")
             try:
                 failure = run_end_to_end(source, optimize=optimized)
             except subprocess.TimeoutExpired:
@@ -168,6 +201,7 @@ def main() -> int:
                 failures.append(f"{source.name}, optimize={optimized}: {failure}")
     for name in ("one", "two"):
         total += 1
+        progress(f"matrix session: {name}")
         try:
             failure = run_end_to_end(ROOT / "programs" / "matrix.txt",
                 ROOT / "programs" / f"matrix_{name}.expected",
@@ -177,6 +211,7 @@ def main() -> int:
         if failure is not None:
             failures.append(f"matrix_{name}: {failure}")
         total += 1
+        progress(f"optimized matrix session: {name}")
         try:
             failure = run_end_to_end(ROOT / "programs" / "matrix.txt",
                 ROOT / "programs" / f"matrix_{name}.expected",
@@ -185,6 +220,9 @@ def main() -> int:
             failure = "optimized matrix session timed out"
         if failure is not None:
             failures.append(f"matrix_{name} with --optimize: {failure}")
+    if interactive:
+        print()
+    print("Running regression tests...", flush=True)
     sys.path.insert(0, str(ROOT))
     suite = unittest.defaultTestLoader.discover(str(TESTS), pattern="test_*.py")
     result = unittest.TextTestRunner(verbosity=2).run(suite)

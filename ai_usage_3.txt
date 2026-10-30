@@ -94,6 +94,16 @@ pthread_create і pthread_join.
 ### 6
 Чудово, виконай згідно плану всі описані завдання за вимогами.
 
+### 7
+Надішли мені команди для самостійної перевірки коду, запуску програми для тесту.
+
+
+А на рахунок презентації давай не так, напши план і рекомендовану структуру презентації, що треба додати тощо. Який текст описовий помістити, тобто мені треба план + вміст який треба додати, але саму презенентацію і скріни Я створю сам.
+Якщо треба якісь скріни або код, вставляй код одразу в план, а скріни кажи де і як зробити.
+
+### 8
+rcbud@DESKTOP-UOGK0AT:~/compilers/epistula-minervae$ .venv/bin/python tests/run_tests.py чомусь зависає і не виконується
+
 ## Work done with Codex
 
 Codex read the Stage 3 brief and Stage 2 repository, explained the requirements,
@@ -124,6 +134,13 @@ assertion of author verification.
 Codex also generated the five-slide defence presentation and PDF using the
 artifact-tool and ReportLab libraries, based on the implementation and README;
 the user should review and adapt these materials before presenting.
+
+After the user reported a test run appearing to hang, Codex observed that the
+test process was still compiling and linking cases, identified the lack of
+progress output, and added progress messages plus timeout reporting for
+optimized AST checks. Codex documented the test runner's behavior in the README.
+The user subsequently asked to create the final presentation and screenshots
+themselves; Codex provided a slide plan and commands for obtaining IR excerpts.
 
 ## Author review and understanding
 

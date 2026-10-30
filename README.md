@@ -21,6 +21,11 @@ clang -pthread program.o -o program
 .venv/bin/python tests/run_tests.py
 ```
 
+The test runner shows the current file check and its progress. It runs
+hundreds of checks, including compilation and native execution with and
+without optimization, so completion time depends on the machine. A test that
+exceeds its timeout is reported as a failure.
+
 Source is UTF-8; diagnostic columns count bytes from 1. A lexical, syntax, or
 semantic error produces one stderr line `compilation error: line L:C: message`,
 a nonzero status, and no output file. Stale output is removed before a build;
