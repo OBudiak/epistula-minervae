@@ -1,0 +1,17 @@
+Program @1:1 statements=3
+  StructDecl @1:1 name="Box" immutable=false fields=1 methods=1
+    FieldDecl @2:5 name="value" type="integer" mutable=true has_default=false
+    FunctionDecl @3:5 name="Kept" result_type="integer" parameters=0 alternate=false statements=1
+      Return @4:9
+        Identifier @4:17 name="value"
+  VarDecl @10:1 name="Item" type="Box" mutable=true keyword=""
+    Constructor @10:13 type="Box" arguments=1 syntax="novum"
+      ConstructorArg @10:19 name=null
+        IntegerLiteral @10:19 text="5" value=5 notation="decimal"
+  Print @11:1 arguments=2
+    PrintArgument @11:19 quoted=false
+      Call @11:19 arguments=0 syntax="parentheses" ends_member_chain=true
+        MemberAccess @11:13 name="Kept" separator=">"
+          Identifier @11:8 name="Item"
+    PrintArgument @11:28 quoted=false
+      StringLiteral @11:28 value="\n"

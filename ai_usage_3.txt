@@ -1,0 +1,136 @@
+# Stage 3 AI usage record
+
+Author: Oleksandr Budiak <obudiak@kse.org.ua>
+Tool used: OpenAI Codex, with shell access to the WSL repository.
+
+The user prompts sent in this conversation are reproduced below. This record
+covers this conversation only. The author must add any other AI use if there
+is any, review the resulting code and this account, and supply the author's
+own understanding before submitting. The assistant cannot truthfully write
+that personal review on the author's behalf.
+
+## Prompts sent
+
+### 1
+Прикріпив документ із завданням проєкту.\
+Підключися по wsl сюди /home/rcbud/compilers/epistula-minervae і проаналізуй попередньо зроблену роботу для асайменту 2. \
+Випиши вимоги та особливості того що треба зробити для отримання максимального балу.\
+Опиши покроково, що від мене треба для побудови логіки мови, синтаксису, ідеї тощо для виконання всіх вимог. \
+Зараз не виконуй саме завдання.\
+Коли будеш працювати з кодом і надалі використовуй мої дані [obudiak@kse.org.ua](mailto:obudiak@kse.org.ua), Oleksandr Budiak.\
+Гілки створюй згідно вимог.
+
+### 2
+Чи можна зробити не один вид власної реалізації, а вибрати декілька?
+коротко
+
+### 3
+Добре, опиши зараз що мені треба описати  для ого щоб виконати масиви, цикли і потоки?
+
+### 4
+В першу чергу код має відповідати вимогам.
+Описав те що ти просив, перевір і запитай що обов'язково мені ще треба уточнити щоб опис був повний.
+
+Масиви:
+тип-змінної longitudo [число як латиною так і звичними числами] Назва знак/слово-присвоєння [значення1, значення2].
+Приклад: integer[] longitudo (XV) Variable <- [X, 100, ...].
+Дозволені всі типи даних, дозволено масив в масиві, і треба дворівневі масиви.
+Нумерація з 1.
+Читати Variable[індекс], змінювати Variable[індекс] <- значення.
+Не обов'язково задавати всі значення одразу, якщо значень більше тоді помилка, якщо менше ніж вказано то теж помилка.
+Бо якщо треба значення записувати поступово, треба на початку взагалі створення вказати пустий масив, типу ...<- []. Треба подавати або всі, або пісті значення. Функція отримує посилання на оригінал, і змінює оригінал.
+immutabilis забороняє змінювати окремі елементи також.
+Помилки меж беремо з вимог.
+
+Цикли:
+nuntia cycliciter quo {умова} <<>>.
+nuntia finite число quo index змінна-для-індексу <<>>.
+Крок 1, початок з 1. індекс це звичайна змінна.
+Не доступна після циклу.
+
+Умови: ідентично до > це o/o, до < це o\o, для <= це о\=о, і для >= це о/=о.
+Умова "і" це ||, умова "або" це |v|, замість break використовувати "Interrumpe!".
+
+Потоки:
+nuntia in filo назва <- quo cape типданих назва1, типданих назва2 <<>>.
+join це exspecta. Якщо Я правильно зрозумів то ти маєш на увазі запускати потік декілька разів то можна.
+
+Передавати можна все, все є копіями, окрім масиву, тексту, структури, це вже посилання.
+Але підлаштуй це під вимоги.
+Потік не вертає значення.
+Якщо цикли змінюють одне й те саме, то це не помилка, хто перший достучався той і міняє.
+Мютекс не робимо.
+Потоки можуть одночасно друкувати, Ні програма, не має дочекатися всіх потоків тільки якщо не викликала exspecta.
+поясни як правильно мені треба описати
+pthread_create і pthread_join.
+
+Програма:
+Створюється матриця 20*20. З числами.
+Людина має ввести число, яке буде в кожній клітинці матриці диблюватися.
+А далі, людина вводить вектор з 20 чисел, кожне число по черзі.
+Далі створюється 4 потоки, і вони по черзі множать вектор на матрицю. Результат виводиться в консоль.
+
+### 5
+1.1 Все записувати nihil або їх нульові значення, структури так само.
+1.2 Підтверджую пропозицію, обмежуємо двома вкладеннями
+1.3 Погоджую
+
+2.4. погоджую,
+2.5. Всі о мають бути саме латинськими, так правильно, бо це типу ваги.
+
+Погоджую.
+
+3.6. Погоджую.
+3.7. Думаю так буде краще, погоджую.
+3.8. Погоджуюся.
+
+4.9. Так, все правильно
+4.10. Вибери duplex.
+
+
+Тепер склади послідовний план виконання роботи згідно вимог завдання та моїх уточнень та описів.
+Додай в план те, що можна робити коміти, але не робити пуш, працювати під моїми даними.
+
+### 6
+Чудово, виконай згідно плану всі описані завдання за вимогами.
+
+## Work done with Codex
+
+Codex read the Stage 3 brief and Stage 2 repository, explained the requirements,
+identified that the existing string support should not be counted as a new
+feature without clarification, and proposed design options. The user selected
+and corrected the array, loop, thread and matrix-program rules in the prompts
+above. The assistant suggested inclusive range bounds, one-based indexing,
+thread handles, the join rule, disjoint writes without a mutex, and four
+workers computing five rows each; the user accepted these choices.
+
+Codex created the local stage3 branch from stage2, set the repository-local
+Git author to the user's requested identity, and implemented changes to the
+lexer, parser, AST, semantic checks, LLVM builder generation, checked-tree
+optimizer and command line. Codex also drafted the EBNF, README, examples,
+test fixtures, test-runner changes, matrix program, recorded sessions and this
+disclosure. The assistant debugged the range parser, flag positioning, inlining
+of narrowed results, name binding, reference lifetimes and read side effects
+after running tests. Code is retained from Codex's successive revisions unless
+the author subsequently edits it; do not interpret this as an assertion that
+the author personally reviewed every line. The author should add any material
+personal edits, what was retained and why, and independent verification results.
+
+The final full run performed by the assistant passed 384 file cases and 37
+regression cases. The suite includes execution with and without optimization
+and both recorded matrix sessions. These are assistant-run results, not an
+assertion of author verification.
+
+Codex also generated the five-slide defence presentation and PDF using the
+artifact-tool and ReportLab libraries, based on the implementation and README;
+the user should review and adapt these materials before presenting.
+
+## Author review and understanding
+
+This section requires the author's own review: identify what was accepted
+unchanged, what was personally changed and why, and explain in the author's
+own words the code not written by the author, particularly semantic checking,
+array bounds, pthread argument lifetime, and optimizer side effects/inlining.
+The assistant cannot attest that the author has completed that review.
+Until this section is supplied, this document is not a complete Stage 3 AI
+disclosure and must not be presented as submission-ready.

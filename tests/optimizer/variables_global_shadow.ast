@@ -1,0 +1,12 @@
+Program @1:1 statements=1
+  If @2:1 then_statements=2 else_if_branches=0 has_else=false
+    Condition
+      BooleanLiteral @2:10 value=true
+    Then
+      VarDecl @3:5 name="Value" type="integer" mutable=true keyword=""
+        IntegerLiteral @3:22 text="8" value=8 notation="decimal"
+      Print @4:5 arguments=2
+        PrintArgument @4:12 quoted=false
+          Identifier @4:12 name="Value"
+        PrintArgument @4:19 quoted=false
+          StringLiteral @4:19 value="\n"

@@ -279,6 +279,7 @@ class FunctionDeclNode(StmtNode):
     body: list[StmtNode]
     alternate: bool = False
     constructor: bool = False
+    thread: bool = False
 
     def dump_lines(self, depth: int = 0) -> list[str]:
         lines = [self._header(depth, "FunctionDecl", name=self.name,
@@ -286,6 +287,8 @@ class FunctionDeclNode(StmtNode):
                               alternate=self.alternate, statements=len(self.body))]
         if self.constructor:
             lines[0] += " constructor=true"
+        if self.thread:
+            lines[0] += " thread=true"
         for parameter in self.parameters:
             lines.extend(parameter.dump_lines(depth + 1))
         for statement in self.body:
@@ -394,3 +397,75 @@ class ExprStmtNode(StmtNode):
         lines = [self._header(depth, "ExprStmt")]
         lines.extend(self.expression.dump_lines(depth + 1))
         return lines
+
+@dataclass
+class LoopNode(StmtNode):
+    condition: ExprNode | None
+    start: ExprNode | None
+    end: ExprNode | None
+    index_name: str | None
+    body: list[StmtNode]
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "Loop", index=self.index_name)]
+        for child in (self.condition, self.start, self.end):
+            if child is not None:
+                lines.extend(child.dump_lines(depth + 1))
+        for statement in self.body:
+            lines.extend(statement.dump_lines(depth + 1))
+        return lines
+
+@dataclass
+class BreakNode(StmtNode):
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        return [self._header(depth, "Break")]
+
+@dataclass
+class LogicalExprNode(ExprNode):
+    operator: str
+    left: ExprNode
+    right: ExprNode
+
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        return ([self._header(depth, "Logical", operator=self.operator)]
+                + self.left.dump_lines(depth + 1)
+                + self.right.dump_lines(depth + 1))
+
+@dataclass
+class ArrayLiteralNode(ExprNode):
+    items: list[ExprNode]
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        lines = [self._header(depth, "ArrayLiteral", items=len(self.items))]
+        for item in self.items:
+            lines.extend(item.dump_lines(depth + 1))
+        return lines
+
+@dataclass
+class IndexNode(ExprNode):
+    object: ExprNode
+    index: ExprNode
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        return ([self._header(depth, "Index")] + self.object.dump_lines(depth + 1)
+                + self.index.dump_lines(depth + 1))
+
+@dataclass
+class ThreadStartNode(StmtNode):
+    name: str
+    call: CallNode
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        return ([self._header(depth, "ThreadStart", name=self.name)]
+                + self.call.dump_lines(depth + 1))
+
+@dataclass
+class ThreadJoinNode(StmtNode):
+    name: str
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        return [self._header(depth, "ThreadJoin", name=self.name)]
+
+@dataclass
+class DiscardNode(StmtNode):
+    expression: ExprNode
+    type_name: str
+    def dump_lines(self, depth: int = 0) -> list[str]:
+        return ([self._header(depth, "Discard", type=self.type_name)]
+                + self.expression.dump_lines(depth + 1))

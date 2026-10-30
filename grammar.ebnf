@@ -1,19 +1,22 @@
-(* Epistula Minervae, stage 2. NEWLINE is a significant lexer token. *)
+(* Epistula Minervae, stage 3. NEWLINE is a significant lexer token. *)
 
 program             = { NEWLINE | top-statement }, EOF ;
 
 top-statement       = ( simple-statement | if-statement | function-declaration
-                      | alternate-function | structure-declaration ), ".", line-end ;
+                      | alternate-function | structure-declaration
+                      | loop-statement | thread-declaration ), ".", line-end ;
 
 block-statement     = simple-statement, ";", NEWLINE
                     | if-statement, ";", NEWLINE
+                    | loop-statement, ";", NEWLINE
+                    | "Interrumpe", "!", NEWLINE
                     | return-statement, "!", NEWLINE ;
 
 simple-statement    = declaration
                     | assignment
                     | print-statement
                     | read-statement
-                    | call-statement ;
+                    | call-statement | thread-start | thread-join ;
 
 declaration         = type, identifier, assignment-operator, expression
                     | "variabilis", identifier, assignment-operator, expression
@@ -26,8 +29,12 @@ legacy-type         = "32bitInt" | "64bitInt" | "sententia" ;
 
 mutable-keyword     = "variabilis" ;
 immutable-keyword   = "immutabilis" | "inaeternum" ;
-type                = "32bitInt" | "64bitInt" | "integer" | "duplex"
+type                = simple-type, [ array-sizes ] ;
+simple-type         = "32bitInt" | "64bitInt" | "integer" | "duplex"
                     | "ludicium" | "sententia" | qualified-name ;
+array-sizes         = "[]", "longitudo", "(", integer-literal, ")"
+                    | "[]", "[]", "longitudo", "(", integer-literal, ",", integer-literal, ")" ;
+integer-literal     = decimal-integer | roman-integer ;
 qualified-name      = identifier, { ".", identifier } ;
 result-type         = type | "nihil" ;
 
@@ -62,7 +69,7 @@ field-declaration   = ( "mutabilis" | immutable-keyword ), ( type | "variabilis"
    initializer. This is checked by semantic analysis. *)
 
 assignment          = lvalue, assignment-operator, expression ;
-lvalue              = identifier, { member-suffix } ;
+lvalue              = identifier, { member-suffix | "[", expression, "]" } ;
 assignment-operator = "<-" | "⬅" | "aequalis" ;
 call-statement      = identifier, { member-suffix }, call-suffix ;
 
@@ -99,9 +106,11 @@ if-statement        = "provisum", expression, "<<", NEWLINE,
 block-body          = { NEWLINE }, block-statement,
                       { { NEWLINE }, block-statement }, { NEWLINE } ;
 
-expression          = comparison ;
+expression          = logical-and, { "|v|", logical-and } ;
+logical-and         = comparison, { "||", comparison } ;
 comparison          = additive, [ comparison-operator, additive ] ;
-comparison-operator = "o-o" | "idem" | "oxo" | "non", "idem" ;
+comparison-operator = "o-o" | "idem" | "oxo" | "non", "idem"
+                    | "o/o" | "o\o" | "o/=o" | "o\=o" ;
 
 additive            = multiplicative, { additive-operator, multiplicative } ;
 additive-operator   = "+" | "adde" | "-" | "subtrahe" ;
@@ -127,9 +136,12 @@ atom                = decimal-integer
                     | identifier
                     | "Legere"
                     | new-expression
+                    | array-literal
                     | "(", expression, ")" ;
+array-literal       = "[", [ expression, { ",", expression } ], "]" ;
 
-postfix-suffix      = member-suffix | call-suffix | constructor-suffix ;
+postfix-suffix      = member-suffix | call-suffix | constructor-suffix
+                    | "[", expression, "]" ;
 member-suffix       = ( "." | ">" ), identifier ;
 call-suffix         = "(", [ arguments | "nihil" ], ")"
                     | "quo", "cape", ( arguments | "nihil" ) ;
@@ -210,3 +222,15 @@ byte-except-closing-parenthesis
      identifier token; otherwise it terminates a top-level statement.
    - '>' is a member separator; '>>' closes a block by longest match.
 *)
+
+
+(* Stage 3: context-sensitive words remain legal identifiers outside these
+   constructs, preserving existing programs. Array sizes are positive;
+   one or two dimensions are supported. *)
+loop-statement      = "nuntia", "cycliciter", "quo", expression, function-body
+                    | "nuntia", "finite", expression, "ad", expression,
+                      "quo", "index", identifier, function-body ;
+thread-declaration  = "nuntia", "in", "filo", identifier, parameters, function-body ;
+thread-start        = "filum", identifier, assignment-operator, "incipe",
+                      identifier, call-suffix ;
+thread-join         = "exspecta", identifier ;

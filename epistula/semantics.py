@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .ast_nodes import (
+    LoopNode, BreakNode, LogicalExprNode, ArrayLiteralNode, IndexNode, ThreadStartNode, ThreadJoinNode, DiscardNode,
     AssignmentNode, BinaryExprNode, BooleanLiteralNode, CallNode,
     ComparisonExprNode, ConstructorNode, ExprNode, ExprStmtNode,
     FieldDeclNode, FunctionDeclNode, IdentifierNode, IfNode,
@@ -84,6 +85,8 @@ class SemanticAnalyzer:
         self.current_function: FunctionSymbol | None = None
         self.current_struct: StructSymbol | None = None
         self.initialized_fields: set[str] | None = None
+        self.loop_depth = 0
+        self.starting_thread = False
         self.writing_target = False
         self.fields_ready: set[str] = set()
         self.pending_constructors: dict[int, tuple] = {}
@@ -92,6 +95,9 @@ class SemanticAnalyzer:
         raise CompilationError(node.line, node.column, message)
 
     def canonical(self, spelling: str, node: object, allow_void: bool = False) -> str:
+        if "[" in spelling:
+            base, dimensions = spelling.split("[", 1)
+            return self.canonical(base, node) + "[" + dimensions
         aliases = {"integer": I32, "duplex": I64}
         result = aliases.get(spelling, spelling)
         if self.current_struct and result not in (I32, I64, BOOL, TEXT, NIL):
@@ -166,8 +172,9 @@ class SemanticAnalyzer:
                 return
             visiting.add(name)
             for item in self.structs[name].fields:
-                if item.type_name in self.structs:
-                    visit(item.type_name)
+                field_type = item.type_name.split("[", 1)[0]
+                if field_type in self.structs:
+                    visit(field_type)
             visiting.remove(name)
             visited.add(name)
         for name in self.structs:
@@ -199,6 +206,8 @@ class SemanticAnalyzer:
                 if struct.field_named(field_node.name) or field_node.name in struct.methods:
                     self.error(field_node, "Campus iteratus est.")
                 expected = self.canonical(field_node.type_name, field_node) if field_node.type_name else None
+                if expected and "[" in expected and isinstance(field_node.initializer, NilLiteralNode):
+                    self.error(field_node.initializer, "Tabula plena vel vacua esse debet.")
                 inferred = (self._expression(field_node.initializer, expected)
                             if field_node.initializer is not None else None)
                 if field_node.type_name is None:
@@ -262,8 +271,57 @@ class SemanticAnalyzer:
                 self.scopes.pop()
 
     def _statement(self, node: StmtNode) -> bool:
+        if isinstance(node, DiscardNode):
+            actual = self._expression(node.expression, node.type_name)
+            self._compatible(actual, node.type_name, node.expression)
+            self._constant_range(node.expression, node.type_name)
+            return False
+        if isinstance(node, ThreadStartNode):
+            self.starting_thread = True
+            try:
+                self._expression(node.call)
+            finally:
+                self.starting_thread = False
+            symbol = self.call_symbols[id(node.call)]
+            if not symbol.node.thread:
+                self.error(node, "Filum exspectabatur.")
+            self._declare(node.name, "<thread>", False, node)
+            self.variable_types[id(node)] = "<thread>"
+            return False
+        if isinstance(node, ThreadJoinNode):
+            variable = self._variable(IdentifierNode(node.line, node.column, node.name))
+            if variable.type_name != "<thread>":
+                self.error(node, "Filum exspectabatur.")
+            return False
+        if isinstance(node, BreakNode):
+            if not self.loop_depth:
+                self.error(node, "Interrumpe extra cyclum est.")
+            return False
+        if isinstance(node, LoopNode):
+            if node.condition is not None:
+                if self._expression(node.condition) != BOOL:
+                    self.error(node.condition, "Condicio ludicium esse debet.")
+            else:
+                for bound in (node.start, node.end):
+                    if self._expression(bound) not in NUMERIC:
+                        self.error(bound, "Finis cycli numerus esse debet.")
+            before = self.initialized_fields.copy() if self.initialized_fields is not None else None
+            self.scopes.append({})
+            self.loop_depth += 1
+            try:
+                if node.index_name:
+                    self._declare(node.index_name, I64, True, node)
+                self._statements(node.body, new_scope=False)
+            finally:
+                self.loop_depth -= 1
+                self.scopes.pop()
+                if before is not None:
+                    self.initialized_fields = before
+            return False
         if isinstance(node, VarDeclNode):
             expected = self.canonical(node.type_name, node) if node.type_name else None
+            if expected and "[" in expected and isinstance(node.initializer, NilLiteralNode):
+                self.error(node.initializer, "Tabula plena vel vacua esse debet.")
             inferred = self._expression(node.initializer, expected)
             if node.type_name is None:
                 if inferred == NIL:
@@ -390,7 +448,36 @@ class SemanticAnalyzer:
     def _expression(self, node: ExprNode | None, expected: str | None = None) -> str:
         if node is None:
             raise ValueError("missing expression")
-        if isinstance(node, IntegerLiteralNode):
+        if isinstance(node, ArrayLiteralNode):
+            if expected is None or "[" not in expected:
+                self.error(node, "Typus tabulae exspectabatur.")
+            base, dimensions = expected.split("[", 1)
+            sizes = [int(value) for value in dimensions[:-1].split(",")]
+            if node.items and len(node.items) != sizes[0]:
+                self.error(node, "Numerus elementorum tabulae invalidus est.")
+            if (node.items and len(sizes) > 1 and
+                    any(isinstance(item, ArrayLiteralNode) and not item.items for item in node.items)):
+                self.error(node, "Tabula plena vel vacua esse debet.")
+            element_type = base + ("[" + ",".join(map(str, sizes[1:])) + "]" if len(sizes) > 1 else "")
+            for item in node.items:
+                actual = self._expression(item, element_type)
+                self._compatible(actual, element_type, item)
+                self._constant_range(item, element_type)
+            type_name = expected
+        elif isinstance(node, IndexNode):
+            base_type = self._expression(node.object)
+            if "[" not in base_type:
+                self.error(node, "Index tabulam requirit.")
+            index_type = self._expression(node.index)
+            if index_type not in NUMERIC:
+                self.error(node.index, "Index numerum requirit.")
+            base, dimensions = base_type.split("[", 1)
+            sizes = [int(value) for value in dimensions[:-1].split(",")]
+            value = OverflowChecker()._constant_integer(node.index, I64)
+            if value is not None and not 1 <= value <= sizes[0]:
+                self.error(node.index, "Index extra fines tabulae est.")
+            type_name = base + ("[" + ",".join(map(str, sizes[1:])) + "]" if len(sizes) > 1 else "")
+        elif isinstance(node, IntegerLiteralNode):
             type_name = I32 if node.value <= 2**31 - 1 else I64
         elif isinstance(node, BooleanLiteralNode):
             type_name = BOOL
@@ -434,9 +521,18 @@ class SemanticAnalyzer:
                 if divisor == 0:
                     self.error(node.right, "Divisio per nihil vetita est.")
             type_name = I64 if I64 in (left, right) or INPUT in (left, right) else I32
+        elif isinstance(node, LogicalExprNode):
+            if self._expression(node.left) != BOOL:
+                self.error(node, "Operatio logica ludicium requirit.")
+            if self._expression(node.right) != BOOL:
+                self.error(node, "Operatio logica ludicium requirit.")
+            type_name = BOOL
         elif isinstance(node, ComparisonExprNode):
-            self._expression(node.left)
-            self._expression(node.right)
+            left = self._expression(node.left)
+            right = self._expression(node.right)
+            if node.operator in ("o/o", "o\\o", "o/=o", "o\\=o") and (
+                    left not in NUMERIC or right not in NUMERIC):
+                self.error(node, "Comparatio ordinis numeros requirit.")
             type_name = BOOL
         elif isinstance(node, ConstructorNode):
             if not node.type_name:
@@ -529,14 +625,29 @@ class SemanticAnalyzer:
                 self.error(node.callee, f"Edictum '{name}' ignotum est.")
         else:
             self.error(node.callee, "Edictum exspectabatur.")
+        if symbol.node.thread != self.starting_thread:
+            self.error(node, "Filum per incipe tantum vocatur." if symbol.node.thread
+                       else "Incipe filum requirit.")
         if self.initialized_fields is not None and receiver_on_self:
             self._check_initialized(node)
         if len(node.arguments) != len(symbol.parameter_types):
             self.error(node, "Numerus argumentorum invalidus est.")
         for argument, expected in zip(node.arguments, symbol.parameter_types):
-            actual = self._expression(argument, expected)
+            starting = self.starting_thread
+            self.starting_thread = False
+            try:
+                actual = self._expression(argument, expected)
+            finally:
+                self.starting_thread = starting
             self._compatible(actual, expected, argument)
             self._constant_range(argument, expected)
+            by_reference = "[" in expected or (symbol.node.thread and expected in self.structs)
+            if by_reference and not self._mutable_chain(argument):
+                self.error(argument, "Valor mutabilis per locum requiritur.")
+            if (symbol.node.thread and expected == TEXT
+                    and isinstance(argument, (IdentifierNode, MemberAccessNode, IndexNode))
+                    and not self._mutable_chain(argument)):
+                self.error(argument, "Textus immutabilis mutari non potest.")
         self.call_symbols[id(node)] = symbol
         if symbol.owner:
             self.member_calls.append((node, symbol, receiver_mutable))
@@ -562,6 +673,8 @@ class SemanticAnalyzer:
             OverflowChecker()._constant_integer(node, type_name)
 
     def _mutable_chain(self, node: ExprNode) -> bool:
+        if isinstance(node, IndexNode):
+            return self._mutable_chain(node.object)
         if isinstance(node, IdentifierNode):
             symbol = self._variable(node)
             if isinstance(symbol, FieldSymbol):
@@ -587,7 +700,7 @@ class SemanticAnalyzer:
                 return isinstance(self._variable(node), FieldSymbol)
             except CompilationError:
                 return False
-        if isinstance(node, MemberAccessNode):
+        if isinstance(node, (MemberAccessNode, IndexNode)):
             return self._on_self(node.object)
         return False
 

@@ -1,0 +1,22 @@
+Program @1:1 statements=6
+  VarDecl @5:1 name="Local" type="integer" mutable=true keyword=""
+    IntegerLiteral @5:18 text="3" value=3 notation="decimal"
+  VarDecl @6:26 name="stage3_inline_1" type="integer" mutable=true keyword=""
+    Identifier @6:26 name="Local"
+  VarDecl @2:5 name="stage3_inline_2" type="integer" mutable=true keyword=""
+    BinaryExpr @2:28 operator="+"
+      Identifier @2:22 name="stage3_inline_1"
+      Identifier @2:30 name="stage3_inline_1"
+  VarDecl @3:13 name="stage3_inline_3" type="integer" mutable=true keyword=""
+    Identifier @3:13 name="stage3_inline_2"
+  VarDecl @6:1 name="Result" type="integer" mutable=true keyword=""
+    Identifier @3:13 name="stage3_inline_3"
+  Print @7:1 arguments=4
+    PrintArgument @7:8 quoted=false
+      Identifier @7:8 name="Result"
+    PrintArgument @7:16 quoted=false
+      StringLiteral @7:16 value=","
+    PrintArgument @7:21 quoted=false
+      Identifier @7:21 name="Local"
+    PrintArgument @7:28 quoted=false
+      StringLiteral @7:28 value="\n"

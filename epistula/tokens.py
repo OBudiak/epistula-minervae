@@ -42,6 +42,12 @@ class TokenKind(Enum):
     ASSIGN = "assignment"
     EQ = "equality"
     NE = "inequality"
+    GT = "gt"
+    LT = "lt"
+    GE = "ge"
+    LE = "le"
+    AND = "and"
+    OR = "or"
     NON = "non"
     IDEM = "idem"
 
@@ -59,6 +65,8 @@ class TokenKind(Enum):
     INTEGRA = "integra"
     POW_WORD = "exponens"
 
+    LBRACKET = "["
+    RBRACKET = "]"
     LPAREN = "("
     RPAREN = ")"
     BLOCK_OPEN = "<<"

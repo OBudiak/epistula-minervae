@@ -1,0 +1,10 @@
+Program @1:1 statements=2
+  FunctionDecl @1:1 name="Needed" result_type="integer" parameters=0 alternate=false statements=1
+    Return @2:5
+      IntegerLiteral @2:13 text="7" value=7 notation="decimal"
+  Print @7:1 arguments=2
+    PrintArgument @7:14 quoted=false
+      Call @7:14 arguments=0 syntax="parentheses" ends_member_chain=false
+        Identifier @7:8 name="Needed"
+    PrintArgument @7:23 quoted=false
+      StringLiteral @7:23 value="\n"

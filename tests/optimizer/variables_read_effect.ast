@@ -1,0 +1,8 @@
+Program @1:1 statements=2
+  Discard @1:1 type="32bitInt"
+    ReadExpr @1:19
+  Print @2:1 arguments=2
+    PrintArgument @2:8 quoted=false
+      IntegerLiteral @2:8 text="99" value=99 notation="decimal"
+    PrintArgument @2:12 quoted=false
+      StringLiteral @2:12 value="\n"

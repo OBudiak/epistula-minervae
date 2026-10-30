@@ -5,6 +5,7 @@ from __future__ import annotations
 from llvmlite import binding, ir
 
 from .ast_nodes import (
+    LoopNode, BreakNode, LogicalExprNode, ArrayLiteralNode, IndexNode, ThreadStartNode, ThreadJoinNode, DiscardNode,
     AssignmentNode, BinaryExprNode, BooleanLiteralNode, CallNode,
     ComparisonExprNode, ConstructorNode, ExprNode, ExprStmtNode,
     FunctionDeclNode, IdentifierNode, IfNode, IntegerLiteralNode,
@@ -43,6 +44,7 @@ class CodeGenerator:
         self.current_struct: str | None = None
         self.self_pointer: ir.Value | None = None
         self.power_functions: dict[str, ir.Function] = {}
+        self.loop_exits: list[ir.Block] = []
         c_type = ir.FunctionType(self.i32, [self.i8p], var_arg=True)
         self.printf = ir.Function(self.module, c_type, name="printf")
         self.scanf = ir.Function(self.module, c_type, name="scanf")
@@ -50,8 +52,26 @@ class CodeGenerator:
             self.module, ir.FunctionType(self.i32, [self.i8p, self.i8p]),
             name="strcmp")
         self.input_runtime = InputRuntime(self)
+        self.thread_wrapper_type = ir.FunctionType(self.i8p, [self.i8p])
+        self.pthread_create = ir.Function(self.module,
+            ir.FunctionType(self.i32, [self.i64.as_pointer(), self.i8p,
+                                       self.thread_wrapper_type.as_pointer(), self.i8p]),
+            name="pthread_create")
+        self.pthread_join = ir.Function(self.module,
+            ir.FunctionType(self.i32, [self.i64, self.i8p.as_pointer()]), name="pthread_join")
+        self.free = ir.Function(self.module, ir.FunctionType(ir.VoidType(), [self.i8p]), name="free")
+        self.thread_wrappers = {}
+        self.thread_arg_types = {}
 
     def llvm_type(self, type_name: str) -> ir.Type:
+        if "[" in type_name:
+            base, dimensions = type_name.split("[", 1)
+            result = self.llvm_type(base)
+            for size in reversed(dimensions[:-1].split(",")):
+                result = ir.ArrayType(result, int(size))
+            return result
+        if type_name == "<thread>":
+            return self.i64
         if type_name == I32:
             return self.i32
         if type_name == I64:
@@ -83,6 +103,9 @@ class CodeGenerator:
             for symbol in struct.methods.values():
                 self._declare_function(symbol)
         for symbol in self.sem.functions.values():
+            if symbol.node.thread:
+                self._thread_wrapper(symbol)
+        for symbol in self.sem.functions.values():
             self._function_body(symbol)
         for struct in self.sem.structs.values():
             if struct.constructor:
@@ -103,7 +126,10 @@ class CodeGenerator:
         return str(self.module)
 
     def _declare_function(self, symbol: FunctionSymbol) -> None:
-        parameters = [self.llvm_type(name) for name in symbol.parameter_types]
+        parameters = [self.llvm_type(name).as_pointer()
+                      if "[" in name or (symbol.node.thread and
+                                          (name in self.sem.structs or name == TEXT))
+                      else self.llvm_type(name) for name in symbol.parameter_types]
         if symbol.owner:
             parameters.insert(0, self.struct_types[symbol.owner].as_pointer())
             name = f"em_method_{symbol.owner}_{symbol.name}"
@@ -112,6 +138,34 @@ class CodeGenerator:
         function_type = ir.FunctionType(self.llvm_type(symbol.result_type), parameters)
         self.functions[(symbol.owner, symbol.name)] = ir.Function(
             self.module, function_type, name=name)
+
+    def _heap_slot(self, llvm_type):
+        null = ir.Constant(llvm_type.as_pointer(), None)
+        size_ptr = self.builder.gep(null, [ir.Constant(self.i32, 1)])
+        size = self.builder.ptrtoint(size_ptr, self.i64)
+        ptr = self.builder.call(self.input_runtime.malloc, [size])
+        self.input_runtime.guard(self.builder.icmp_unsigned("!=", ptr, ir.Constant(self.i8p, None)),
+                                 "allocation failed")
+        return self.builder.bitcast(ptr, llvm_type.as_pointer())
+
+    def _thread_wrapper(self, symbol):
+        function = self.functions[(None, symbol.name)]
+        arguments_type = ir.LiteralStructType([arg.type for arg in function.args])
+        wrapper = ir.Function(self.module, self.thread_wrapper_type,
+                              name="em_thread_" + symbol.name)
+        self.thread_wrappers[symbol.name] = wrapper
+        self.thread_arg_types[symbol.name] = arguments_type
+        saved = self.builder
+        self.builder = ir.IRBuilder(wrapper.append_basic_block("entry"))
+        ptr = self.builder.bitcast(wrapper.args[0], arguments_type.as_pointer())
+        values = []
+        for index in range(len(symbol.parameter_types)):
+            field = self.builder.gep(ptr, [ir.Constant(self.i32, 0), ir.Constant(self.i32, index)])
+            values.append(self.builder.load(field))
+        self.builder.call(self.free, [wrapper.args[0]])
+        self.builder.call(function, values)
+        self.builder.ret(ir.Constant(self.i8p, None))
+        self.builder = saved
 
     def _function_body(self, symbol: FunctionSymbol) -> None:
         llvm_function = self.functions[(symbol.owner, symbol.name)]
@@ -124,9 +178,16 @@ class CodeGenerator:
         for parameter, type_name, value in zip(symbol.node.parameters,
                                                 symbol.parameter_types, args):
             value.name = parameter.name
-            slot = self.builder.alloca(self.llvm_type(type_name), name=parameter.name)
-            self.builder.store(value, slot)
-            self.scopes[-1][parameter.name] = slot
+            if "[" in type_name or (symbol.node.thread and
+                                     (type_name in self.sem.structs or type_name == TEXT)):
+                self.scopes[-1][parameter.name] = value
+            else:
+                if type_name in self.sem.structs or type_name == TEXT:
+                    slot = self._heap_slot(self.llvm_type(type_name))
+                else:
+                    slot = self.builder.alloca(self.llvm_type(type_name), name=parameter.name)
+                self.builder.store(value, slot)
+                self.scopes[-1][parameter.name] = slot
         for statement in symbol.node.body:
             if self.builder.block.is_terminated:
                 break
@@ -138,13 +199,59 @@ class CodeGenerator:
                 self.builder.unreachable()
 
     def _statement(self, node: StmtNode) -> None:
+        if isinstance(node, DiscardNode):
+            value = self._value(node.expression)
+            self._cast(value, self.sem.expression_types[id(node.expression)], node.type_name)
+            return
+        if isinstance(node, ThreadStartNode):
+            symbol = self.sem.call_symbols[id(node.call)]
+            args_type = self.thread_arg_types[symbol.name]
+            args_slot = self._heap_slot(args_type)
+            for index, (argument, expected) in enumerate(zip(node.call.arguments, symbol.parameter_types)):
+                if "[" in expected or expected in self.sem.structs or expected == TEXT:
+                    if expected == TEXT and not isinstance(argument, (IdentifierNode, MemberAccessNode, IndexNode)):
+                        value = self._heap_slot(self.i8p)
+                        self.builder.store(self._value(argument), value)
+                    else:
+                        value = self._address(argument)
+                else:
+                    value = self._cast(self._value(argument),
+                                       self.sem.expression_types[id(argument)], expected)
+                field = self.builder.gep(args_slot, [ir.Constant(self.i32, 0), ir.Constant(self.i32, index)])
+                self.builder.store(value, field)
+            if self.current_function is None and len(self.scopes) == 1:
+                slot = self.global_ptrs[node.name]
+            else:
+                slot = self.builder.alloca(self.i64, name=node.name)
+                self.scopes[-1][node.name] = slot
+            status = self.builder.call(self.pthread_create, [slot, ir.Constant(self.i8p, None),
+                       self.thread_wrappers[symbol.name], self.builder.bitcast(args_slot, self.i8p)])
+            self.input_runtime.guard(self.builder.icmp_signed("==", status, ir.Constant(self.i32, 0)),
+                                     "pthread_create failed")
+            return
+        if isinstance(node, ThreadJoinNode):
+            target = IdentifierNode(node.line, node.column, node.name)
+            handle = self.builder.load(self._address(target))
+            status = self.builder.call(self.pthread_join, [handle, ir.Constant(self.i8p.as_pointer(), None)])
+            self.input_runtime.guard(self.builder.icmp_signed("==", status, ir.Constant(self.i32, 0)),
+                                     "pthread_join failed")
+            return
+        if isinstance(node, BreakNode):
+            self.builder.branch(self.loop_exits[-1])
+            return
+        if isinstance(node, LoopNode):
+            self._loop(node)
+            return
         if isinstance(node, VarDeclNode):
             if self.current_function is None and len(self.scopes) == 1:
                 type_name = self.sem.globals[node.name].type_name
                 slot = self.global_ptrs[node.name]
             else:
                 type_name = self.sem.variable_types[id(node)]
-                slot = self.builder.alloca(self.llvm_type(type_name), name=node.name)
+                if "[" in type_name or type_name in self.sem.structs or type_name == TEXT:
+                    slot = self._heap_slot(self.llvm_type(type_name))
+                else:
+                    slot = self.builder.alloca(self.llvm_type(type_name), name=node.name)
                 self.scopes[-1][node.name] = slot
             value = self._value(node.initializer)
             self.builder.store(self._cast(value,
@@ -191,6 +298,41 @@ class CodeGenerator:
             return
         raise TypeError(type(node).__name__)
 
+    def _loop(self, node: LoopNode) -> None:
+        function = self.builder.function
+        test = function.append_basic_block("loop_test")
+        body = function.append_basic_block("loop_body")
+        done = function.append_basic_block("loop_end")
+        self.scopes.append({})
+        if node.index_name:
+            start = self._cast(self._value(node.start), self.sem.expression_types[id(node.start)], I64)
+            end = self._cast(self._value(node.end), self.sem.expression_types[id(node.end)], I64)
+            slot = self.builder.alloca(self.i64, name=node.index_name)
+            self.builder.store(start, slot)
+            self.scopes[-1][node.index_name] = slot
+        self.builder.branch(test)
+        self.builder.position_at_end(test)
+        condition = (self.builder.icmp_signed("<=", self.builder.load(slot), end)
+                     if node.index_name else self._value(node.condition))
+        self.builder.cbranch(condition, body, done)
+        self.builder.position_at_end(body)
+        self.loop_exits.append(done)
+        for statement in node.body:
+            if self.builder.block.is_terminated:
+                break
+            self._statement(statement)
+        self.loop_exits.pop()
+        if not self.builder.block.is_terminated:
+            if node.index_name:
+                step = function.append_basic_block("loop_step")
+                self.builder.cbranch(self.builder.icmp_signed(">=", self.builder.load(slot), end),
+                                     done, step)
+                self.builder.position_at_end(step)
+                self.builder.store(self.builder.add(self.builder.load(slot), ir.Constant(self.i64, 1)), slot)
+            self.builder.branch(test)
+        self.scopes.pop()
+        self.builder.position_at_end(done)
+
     def _if(self, node: IfNode) -> None:
         function = self.builder.function
         end = function.append_basic_block("if_end")
@@ -221,6 +363,16 @@ class CodeGenerator:
 
     def _value(self, node: ExprNode) -> ir.Value | None:
         type_name = self.sem.expression_types[id(node)]
+        if isinstance(node, ArrayLiteralNode):
+            result = ir.Constant(self.llvm_type(type_name), None)
+            base, dimensions = type_name.split("[", 1)
+            sizes = dimensions[:-1].split(",")
+            element_type = base + ("[" + ",".join(sizes[1:]) + "]" if len(sizes) > 1 else "")
+            for index, item in enumerate(node.items):
+                value = self._value(item)
+                value = self._cast(value, self.sem.expression_types[id(item)], element_type)
+                result = self.builder.insert_value(result, value, index)
+            return result
         if isinstance(node, IntegerLiteralNode):
             return ir.Constant(self.llvm_type(type_name), node.value)
         if isinstance(node, BooleanLiteralNode):
@@ -231,7 +383,7 @@ class CodeGenerator:
             return self._string_pointer(node.value)
         if isinstance(node, ReadExprNode):
             return self._read(type_name)
-        if isinstance(node, (IdentifierNode, MemberAccessNode)):
+        if isinstance(node, (IdentifierNode, MemberAccessNode, IndexNode)):
             return self.builder.load(self._address(node))
         if isinstance(node, ConstructorNode):
             return self._constructor(node)
@@ -264,6 +416,26 @@ class CodeGenerator:
                 return self.builder.srem(left, right)
             if operator in ("^", "exponens"):
                 return self.builder.call(self._power_function(type_name), [left, right])
+        if isinstance(node, LogicalExprNode):
+            left = self._value(node.left)
+            origin = self.builder.block
+            rhs = self.builder.function.append_basic_block("logic_rhs")
+            done = self.builder.function.append_basic_block("logic_end")
+            if node.operator == "||":
+                self.builder.cbranch(left, rhs, done)
+                short = ir.Constant(self.i1, 0)
+            else:
+                self.builder.cbranch(left, done, rhs)
+                short = ir.Constant(self.i1, 1)
+            self.builder.position_at_end(rhs)
+            right = self._value(node.right)
+            rhs_end = self.builder.block
+            self.builder.branch(done)
+            self.builder.position_at_end(done)
+            result = self.builder.phi(self.i1)
+            result.add_incoming(short, origin)
+            result.add_incoming(right, rhs_end)
+            return result
         if isinstance(node, ComparisonExprNode):
             return self._comparison(node)
         raise TypeError(type(node).__name__)
@@ -335,6 +507,12 @@ class CodeGenerator:
         left_type = self.sem.expression_types[id(node.left)]
         right_type = self.sem.expression_types[id(node.right)]
         equality = node.operator in ("o-o", "idem")
+        ordering = {"o/o": ">", "o\\o": "<", "o/=o": ">=", "o\\=o": "<="}
+        if node.operator in ordering:
+            width = I64 if I64 in (left_type, right_type) else I32
+            left = self._cast(self._value(node.left), left_type, width)
+            right = self._cast(self._value(node.right), right_type, width)
+            return self.builder.icmp_signed(ordering[node.operator], left, right)
         if INPUT in (left_type, right_type):
             return self._input_comparison(node, left_type, right_type, equality)
         if left_type == NIL and right_type == NIL:
@@ -371,7 +549,7 @@ class CodeGenerator:
 
     def _constructor(self, node: ConstructorNode) -> ir.Value:
         struct = self.sem.structs[node.type_name]
-        slot = self.builder.alloca(self.struct_types[node.type_name])
+        slot = self._heap_slot(self.struct_types[node.type_name])
         self.builder.store(ir.Constant(self.struct_types[node.type_name], None), slot)
         # Evaluate supplied arguments in their source order and caller scope.
         values = {id(argument.value): self._value(argument.value) for argument in node.arguments}
@@ -412,13 +590,26 @@ class CodeGenerator:
             else:
                 arguments.append(self.self_pointer)
         for argument, target_type in zip(node.arguments, symbol.parameter_types):
-            value = self._value(argument)
-            arguments.append(self._cast(value,
-                                        self.sem.expression_types[id(argument)],
-                                        target_type))
+            if "[" in target_type:
+                arguments.append(self._address(argument))
+            else:
+                value = self._value(argument)
+                arguments.append(self._cast(value,
+                                            self.sem.expression_types[id(argument)],
+                                            target_type))
         return self.builder.call(function, arguments)
 
     def _address(self, node: ExprNode) -> ir.Value:
+        if isinstance(node, IndexNode):
+            array_type = self.sem.expression_types[id(node.object)]
+            size = int(array_type.split("[", 1)[1].split(",", 1)[0].rstrip("]"))
+            address = self._address(node.object)
+            index = self._cast(self._value(node.index), self.sem.expression_types[id(node.index)], I64)
+            lower = self.builder.icmp_signed(">=", index, ir.Constant(self.i64, 1))
+            upper = self.builder.icmp_signed("<=", index, ir.Constant(self.i64, size))
+            self.input_runtime.guard(self.builder.and_(lower, upper), "array index out of bounds")
+            offset = self.builder.sub(index, ir.Constant(self.i64, 1))
+            return self.builder.gep(address, [ir.Constant(self.i32, 0), offset])
         if isinstance(node, IdentifierNode):
             for scope in reversed(self.scopes[1:]):
                 if node.name in scope:
@@ -440,7 +631,7 @@ class CodeGenerator:
                                     [ir.Constant(self.i32, 0),
                                      ir.Constant(self.i32, field.index)])
         value = self._value(node)
-        slot = self.builder.alloca(self.llvm_type(self.sem.expression_types[id(node)]))
+        slot = self._heap_slot(self.llvm_type(self.sem.expression_types[id(node)]))
         self.builder.store(value, slot)
         return slot
 
@@ -500,6 +691,16 @@ class CodeGenerator:
             self._print_loaded(self.builder.extract_value(value, 2), TEXT)
             self.builder.branch(done)
             self.builder.position_at_end(done)
+        elif "[" in type_name:
+            base, dimensions = type_name.split("[", 1)
+            sizes = dimensions[:-1].split(",")
+            element_type = base + ("[" + ",".join(sizes[1:]) + "]" if len(sizes) > 1 else "")
+            self._print_text("[")
+            for index in range(int(sizes[0])):
+                if index:
+                    self._print_text(", ")
+                self._print_loaded(self.builder.extract_value(value, index), element_type)
+            self._print_text("]")
         elif type_name == I32:
             self.builder.call(self.printf, [self._string_pointer("%d"), value])
         elif type_name == I64:

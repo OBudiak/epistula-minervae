@@ -14,12 +14,14 @@ TESTS = Path(__file__).resolve().parent
 
 
 def run_case(source: Path, expected: Path, should_succeed: bool,
-             semantic: bool = False) -> str | None:
+             semantic: bool = False, optimize: bool = False) -> str | None:
     with tempfile.TemporaryDirectory(prefix="epistula-error-") as directory:
         output = Path(directory) / "rejected.ll"
-        command = ([sys.executable, str(COMPILER), str(source), str(output)]
-                   if semantic else
-                   [sys.executable, str(COMPILER), "--ast", str(source)])
+        command = [sys.executable, str(COMPILER)]
+        if optimize:
+            command.append("--optimize")
+        command += ([str(source), str(output)] if semantic
+                    else ["--ast", str(source)])
         completed = subprocess.run(
             command, cwd=ROOT, text=True, encoding="utf-8",
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -34,8 +36,10 @@ def run_case(source: Path, expected: Path, should_succeed: bool,
             return f"expected exit 0, got {completed.returncode}; stderr={completed.stderr!r}"
         if completed.stderr:
             return f"expected empty stderr, got {completed.stderr!r}"
-        if completed.stdout != expected_text:
+        if not optimize and completed.stdout != expected_text:
             return "AST output differs from the golden file"
+        if optimize and not completed.stdout.startswith("Program "):
+            return "optimized AST is missing"
     else:
         if completed.returncode == 0:
             return "expected non-zero exit code"
@@ -52,11 +56,12 @@ def run_case(source: Path, expected: Path, should_succeed: bool,
     return None
 
 
-def run_end_to_end(source: Path) -> str | None:
-    expected = source.with_suffix(".expected")
+def run_end_to_end(source: Path, expected: Path | None = None, input_file: Path | None = None,
+                   optimize: bool = False) -> str | None:
+    expected = expected or source.with_suffix(".expected")
     if not expected.exists():
         return f"missing {expected.name}"
-    input_file = source.with_suffix(".in")
+    input_file = input_file or source.with_suffix(".in")
     input_data = input_file.read_bytes() if input_file.exists() else b""
     with tempfile.TemporaryDirectory(prefix="epistula-e2e-") as directory:
         temporary = Path(directory)
@@ -64,10 +69,11 @@ def run_end_to_end(source: Path) -> str | None:
         object_file = temporary / "program.o"
         executable = temporary / "program"
         commands = [
-            [sys.executable, str(COMPILER), str(source), str(llvm_file)],
+            [sys.executable, str(COMPILER)] + (["--optimize"] if optimize else [])
+            + [str(source), str(llvm_file)],
             ["llc", "-relocation-model=pic", "-filetype=obj",
              str(llvm_file), "-o", str(object_file)],
-            ["clang", str(object_file), "-o", str(executable)],
+            ["clang", "-pthread", str(object_file), "-o", str(executable)],
         ]
         for command in commands:
             try:
@@ -117,6 +123,13 @@ def main() -> int:
                 failure = "compiler exceeded the 10-second test timeout"
             if failure is not None:
                 failures.append(f"{source.name}: {failure}")
+            total += 1
+            try:
+                failure = run_case(source, expected, should_succeed, semantic, optimize=True)
+            except subprocess.TimeoutExpired:
+                failure = "optimized compiler exceeded the 10-second timeout"
+            if failure is not None:
+                failures.append(f"{source.name} with --optimize: {failure}")
 
     end_to_end = sorted((TESTS / "e2e").glob("*.em"))
     if len(end_to_end) < 10:
@@ -131,6 +144,47 @@ def main() -> int:
             failure = "compile or run exceeded the 15-second timeout"
         if failure is not None:
             failures.append(f"{source.name}: {failure}")
+    for source in end_to_end + sorted((TESTS / "runtime_invalid").glob("*.em")):
+        total += 1
+        try:
+            failure = run_end_to_end(source, optimize=True)
+        except subprocess.TimeoutExpired:
+            failure = "optimized compile or run exceeded the timeout"
+        if failure is not None:
+            failures.append(f"{source.name} with --optimize: {failure}")
+    for source in sorted((TESTS / "optimizer").glob("*.em")):
+        total += 1
+        ast = subprocess.run([sys.executable, str(COMPILER), "--optimize", "--ast", str(source)],
+                             cwd=ROOT, text=True, encoding="utf-8", capture_output=True, timeout=10)
+        if ast.returncode or ast.stderr or ast.stdout != source.with_suffix(".ast").read_text(encoding="utf-8"):
+            failures.append(f"{source.name}: optimized AST differs or failed: {ast.stderr}")
+        for optimized in (False, True):
+            total += 1
+            try:
+                failure = run_end_to_end(source, optimize=optimized)
+            except subprocess.TimeoutExpired:
+                failure = "optimizer test timed out"
+            if failure:
+                failures.append(f"{source.name}, optimize={optimized}: {failure}")
+    for name in ("one", "two"):
+        total += 1
+        try:
+            failure = run_end_to_end(ROOT / "programs" / "matrix.txt",
+                ROOT / "programs" / f"matrix_{name}.expected",
+                ROOT / "programs" / f"matrix_{name}.in")
+        except subprocess.TimeoutExpired:
+            failure = "matrix session timed out"
+        if failure is not None:
+            failures.append(f"matrix_{name}: {failure}")
+        total += 1
+        try:
+            failure = run_end_to_end(ROOT / "programs" / "matrix.txt",
+                ROOT / "programs" / f"matrix_{name}.expected",
+                ROOT / "programs" / f"matrix_{name}.in", optimize=True)
+        except subprocess.TimeoutExpired:
+            failure = "optimized matrix session timed out"
+        if failure is not None:
+            failures.append(f"matrix_{name} with --optimize: {failure}")
     sys.path.insert(0, str(ROOT))
     suite = unittest.defaultTestLoader.discover(str(TESTS), pattern="test_*.py")
     result = unittest.TextTestRunner(verbosity=2).run(suite)

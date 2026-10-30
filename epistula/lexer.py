@@ -87,6 +87,22 @@ class Lexer:
                 self._emit_fixed(TokenKind.TYPE_I64, len(b"64bitInt"))
                 continue
 
+            # Match the scale-shaped operators before identifiers (they start with o).
+            operators = ((b"o/=o", TokenKind.GE), (b"o\\=o", TokenKind.LE),
+                         (b"o/o", TokenKind.GT), (b"o\\o", TokenKind.LT),
+                         (b"||", TokenKind.AND), (b"|v|", TokenKind.OR))
+            # A scale operator is infix. At the start of an expression,
+            # o/o must remain the old division of two variables named o.
+            operands = (TokenKind.IDENTIFIER, TokenKind.INTEGER, TokenKind.ROMAN_INTEGER,
+                        TokenKind.TRUE, TokenKind.FALSE, TokenKind.NIL, TokenKind.STRING,
+                        TokenKind.RPAREN, TokenKind.RBRACKET)
+            can_end_expression = bool(self.tokens and self.tokens[-1].kind in operands)
+            matched = next(((raw, kind) for raw, kind in operators
+                            if self._starts(raw) and (not raw.startswith(b"o")
+                                                     or can_end_expression)), None)
+            if matched:
+                self._emit_fixed(matched[1], len(matched[0]))
+                continue
             if self._is_digit(current):
                 self._decimal_integer()
                 continue
@@ -123,6 +139,8 @@ class Lexer:
                 0x2F: TokenKind.SLASH,
                 0x25: TokenKind.PERCENT,
                 0x5E: TokenKind.CARET,
+                0x5B: TokenKind.LBRACKET,
+                0x5D: TokenKind.RBRACKET,
                 0x28: TokenKind.LPAREN,
                 0x29: TokenKind.RPAREN,
                 0x2E: TokenKind.DOT,
