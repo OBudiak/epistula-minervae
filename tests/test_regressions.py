@@ -119,9 +119,12 @@ class ParserTests(unittest.TestCase):
             parse("provisum Veritas <<\nScribe I;\n>>,\naliter <<\n>>.\n")
         self.assertEqual(caught.exception.message, "Clausula vacua esse non potest.")
 
-    def test_parentheses_cannot_bypass_quotation_marker(self):
+    def test_only_first_direct_string_needs_quotation_marker(self):
         with self.assertRaises(CompilationError):
             parse('Scribe (("text")).\n')
+        parse('Scribe Value, "text".\n')
+        with self.assertRaises(CompilationError):
+            parse('Scribe Value, ("text").\n')
 
     def test_strings_in_comparisons_are_not_printed_literals(self):
         parse('Scribe "text" idem Legere.\n')
@@ -134,7 +137,7 @@ class ParserTests(unittest.TestCase):
         self.assertFalse(program.statements[1].mutable)
 
     def test_string_escape_and_nihil_values(self):
-        program = parse('Scribe - "a/lineab//c", - "nihil".\n')
+        program = parse('Scribe - "a/lineab//c", "nihil".\n')
         values = [arg.value.value for arg in program.statements[0].arguments]
         self.assertEqual(values, ["a\nb/c", ""])
 
@@ -201,6 +204,30 @@ class OverflowTests(unittest.TestCase):
 
 
 class CLITests(unittest.TestCase):
+    def test_failed_ir_build_removes_stale_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source, output = Path(temporary) / "input.em", Path(temporary) / "output.ll"
+            source.write_text("Scribe Unknown.\n")
+            output.write_text("stale IR")
+            completed = subprocess.run([sys.executable, str(ROOT / "compiler.py"),
+                                        str(source), str(output)], capture_output=True, timeout=10)
+            self.assertEqual(completed.returncode, 1)
+            self.assertEqual(completed.stdout, b"")
+            self.assertEqual(completed.stderr,
+                             b"compilation error: line 1:8: Nomen 'Unknown' ignotum est.\n")
+            self.assertFalse(output.exists())
+
+    def test_ir_output_cannot_overwrite_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "input.em"
+            original = "integer Number <- 1.\n"
+            source.write_text(original)
+            completed = subprocess.run([sys.executable, str(ROOT / "compiler.py"),
+                                        str(source), str(source)], capture_output=True, timeout=10)
+            self.assertEqual(completed.returncode, 1)
+            self.assertEqual(source.read_text(), original)
+            self.assertEqual(completed.stderr.count(b"\n"), 1)
+
     def run_cli(self, source: bytes):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "input.em"

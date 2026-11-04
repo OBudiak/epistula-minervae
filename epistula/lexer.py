@@ -5,11 +5,15 @@ from .tokens import Token, TokenKind
 
 
 _KEYWORDS = {
-    "sententia": TokenKind.TYPE_BOOL,
+    "integer": TokenKind.TYPE_INTEGER,
+    "duplex": TokenKind.TYPE_DUPLEX,
+    "ludicium": TokenKind.TYPE_BOOL,
+    "sententia": TokenKind.TYPE_TEXT,
     "Veritas": TokenKind.TRUE,
     "Falsus": TokenKind.FALSE,
     "nihil": TokenKind.NIL,
     "variabilis": TokenKind.MUTABLE,
+    "mutabilis": TokenKind.FIELD_MUTABLE,
     "immutabilis": TokenKind.IMMUTABLE,
     "inaeternum": TokenKind.ETERNAL,
     "provisum": TokenKind.IF,
@@ -17,6 +21,15 @@ _KEYWORDS = {
     "Scribe": TokenKind.PRINT,
     "Legere": TokenKind.READ,
     "in": TokenKind.IN,
+    "nuntia": TokenKind.ANNOUNCE,
+    "edictum": TokenKind.EDICT,
+    "structuram": TokenKind.STRUCT,
+    "immutabilem": TokenKind.IMMUTABLE_TYPE,
+    "quo": TokenKind.QUO,
+    "cape": TokenKind.CAPE,
+    "remitteque": TokenKind.RESULT,
+    "reditus": TokenKind.RETURN,
+    "novum": TokenKind.NEW,
     "aequalis": TokenKind.ASSIGN,
     "idem": TokenKind.IDEM,
     "non": TokenKind.NON,
@@ -74,6 +87,22 @@ class Lexer:
                 self._emit_fixed(TokenKind.TYPE_I64, len(b"64bitInt"))
                 continue
 
+            # Match the scale-shaped operators before identifiers (they start with o).
+            operators = ((b"o/=o", TokenKind.GE), (b"o\\=o", TokenKind.LE),
+                         (b"o/o", TokenKind.GT), (b"o\\o", TokenKind.LT),
+                         (b"||", TokenKind.AND), (b"|v|", TokenKind.OR))
+            # A scale operator is infix. At the start of an expression,
+            # o/o must remain the old division of two variables named o.
+            operands = (TokenKind.IDENTIFIER, TokenKind.INTEGER, TokenKind.ROMAN_INTEGER,
+                        TokenKind.TRUE, TokenKind.FALSE, TokenKind.NIL, TokenKind.STRING,
+                        TokenKind.RPAREN, TokenKind.RBRACKET)
+            can_end_expression = bool(self.tokens and self.tokens[-1].kind in operands)
+            matched = next(((raw, kind) for raw, kind in operators
+                            if self._starts(raw) and (not raw.startswith(b"o")
+                                                     or can_end_expression)), None)
+            if matched:
+                self._emit_fixed(matched[1], len(matched[0]))
+                continue
             if self._is_digit(current):
                 self._decimal_integer()
                 continue
@@ -110,11 +139,15 @@ class Lexer:
                 0x2F: TokenKind.SLASH,
                 0x25: TokenKind.PERCENT,
                 0x5E: TokenKind.CARET,
+                0x5B: TokenKind.LBRACKET,
+                0x5D: TokenKind.RBRACKET,
                 0x28: TokenKind.LPAREN,
                 0x29: TokenKind.RPAREN,
                 0x2E: TokenKind.DOT,
                 0x3B: TokenKind.SEMICOLON,
                 0x2C: TokenKind.COMMA,
+                0x3E: TokenKind.MEMBER,
+                0x21: TokenKind.BANG,
             }
             kind = one_byte.get(current)
             if kind is not None:

@@ -1,0 +1,1 @@
+Sententia Text <- "text".

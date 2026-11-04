@@ -1,0 +1,6 @@
+Program @1:1 statements=1
+  Print @3:1 arguments=2
+    PrintArgument @3:8 quoted=false
+      IntegerLiteral @3:8 text="5" value=5 notation="decimal"
+    PrintArgument @3:11 quoted=false
+      StringLiteral @3:11 value="\n"

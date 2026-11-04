@@ -1,0 +1,46 @@
+N.B. Matrix-vector multiplication using four worker threads.
+nuntia structuram Report <<
+    immutabilis duplex Count <- XX;
+    nuntia edictum Show quo cape nihil remitteque nihil <<
+        Scribe - "Result (", Count, " values):/linea";
+    >>;
+>>.
+nuntia edictum PrintValue quo cape duplex Value remitteque nihil <<
+    Scribe Value, "/linea";
+>>.
+nuntia in filo Worker quo cape duplex[][] longitudo (XX, XX) Matrix, duplex[] longitudo (XX) Vector, duplex[] longitudo (XX) Result, duplex Start <<
+    nuntia finite Start ad Start + 4 quo index Row <<
+        duplex Sum <- 0;
+        nuntia finite 1 ad XX quo index Column <<
+            Sum <- Sum + Matrix[Row][Column] * Vector[Column];
+        >>;
+        Result[Row] <- Sum;
+    >>;
+>>.
+duplex[][] longitudo (XX, XX) Matrix <- [].
+duplex[] longitudo (XX) Vector <- [].
+duplex[] longitudo (XX) Result <- [].
+Scribe - "Matrix value: ".
+duplex Fill <- Legere.
+nuntia finite 1 ad XX quo index Row <<
+    nuntia finite 1 ad XX quo index Column <<
+        Matrix[Row][Column] <- Fill;
+    >>;
+>>.
+nuntia finite 1 ad XX quo index Position <<
+    Scribe - "Vector ", Position, ": ";
+    Vector[Position] <- Legere;
+>>.
+filum First <- incipe Worker(Matrix, Vector, Result, 1).
+filum Second <- incipe Worker(Matrix, Vector, Result, 6).
+filum Third <- incipe Worker(Matrix, Vector, Result, 11).
+filum Fourth <- incipe Worker(Matrix, Vector, Result, 16).
+exspecta First.
+exspecta Second.
+exspecta Third.
+exspecta Fourth.
+Report Header <- novum nihil.
+Header > Show(nihil).
+nuntia finite 1 ad XX quo index Position <<
+    PrintValue(Result[Position]);
+>>.

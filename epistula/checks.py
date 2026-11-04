@@ -17,6 +17,8 @@ from .errors import CompilationError
 _LIMITS = {
     "32bitInt": (-(2**31), 2**31 - 1),
     "64bitInt": (-(2**63), 2**63 - 1),
+    "integer": (-(2**31), 2**31 - 1),
+    "duplex": (-(2**63), 2**63 - 1),
 }
 
 

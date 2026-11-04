@@ -1,23 +1,34 @@
 from __future__ import annotations
 
 from .ast_nodes import (
+    LoopNode, BreakNode, LogicalExprNode, ArrayLiteralNode, IndexNode, ThreadStartNode, ThreadJoinNode,
     AssignmentNode,
     BinaryExprNode,
     BooleanLiteralNode,
     ComparisonExprNode,
+    ConstructorArgNode,
+    ConstructorNode,
     ElseIfNode,
+    ExprStmtNode,
     ExprNode,
+    FieldDeclNode,
+    FunctionDeclNode,
     IdentifierNode,
     IfNode,
     IntegerLiteralNode,
+    CallNode,
+    MemberAccessNode,
     NilLiteralNode,
+    ParameterNode,
     PrintArgumentNode,
     PrintNode,
     ProgramNode,
     ReadExprNode,
     ReadStmtNode,
+    ReturnNode,
     StmtNode,
     StringLiteralNode,
+    StructDeclNode,
     UnaryExprNode,
     VarDeclNode,
 )
@@ -43,8 +54,51 @@ class Parser:
         return ProgramNode(start.line, start.column, statements)
 
     def _parse_statement(self, top_level: bool) -> StmtNode:
+        if (self._peek().text == "Interrumpe"
+                and self._peek(1).kind == TokenKind.BANG):
+            keyword = self._advance()
+            self._advance()
+            self._expect_line_end(allow_eof=top_level)
+            return BreakNode(keyword.line, keyword.column)
+        if self._check(TokenKind.RETURN):
+            if top_level:
+                token = self._peek()
+                raise CompilationError(token.line, token.column,
+                                       "Reditus extra edictum est.")
+            keyword = self._advance()
+            value = self._parse_expression()
+            self._expect(TokenKind.BANG, "Signum '!' exspectabatur.")
+            self._expect_line_end(allow_eof=False)
+            return ReturnNode(keyword.line, keyword.column, value)
         if self._check(TokenKind.IF):
             statement = self._parse_if()
+        elif (self._check(TokenKind.ANNOUNCE)
+              and self._peek(1).text in ("cycliciter", "finite")):
+            statement = self._parse_loop()
+        elif self._check(TokenKind.ANNOUNCE):
+            if not top_level:
+                token = self._peek()
+                raise CompilationError(token.line, token.column,
+                                       "Edictum vel structura in summo tantum licet.")
+            keyword = self._advance()
+            if self._check(TokenKind.STRUCT):
+                statement = self._parse_struct(keyword)
+            elif self._check(TokenKind.IN) and self._peek(1).text == "filo":
+                self._advance()
+                self._advance()
+                name = self._expect(TokenKind.IDENTIFIER, "Nomen fili exspectabatur.")
+                params = self._parse_parameters()
+                body = self._parse_function_body()
+                statement = FunctionDeclNode(keyword.line, keyword.column, name.text,
+                                             params, "nihil", body, thread=True)
+            else:
+                statement = self._parse_function(keyword)
+        elif self._looks_like_alternate_function():
+            if not top_level:
+                token = self._peek()
+                raise CompilationError(token.line, token.column,
+                                       "Edictum in summo tantum licet.")
+            statement = self._parse_alternate_function()
         else:
             statement = self._parse_simple_statement()
 
@@ -55,10 +109,44 @@ class Parser:
         return statement
 
     def _parse_simple_statement(self) -> StmtNode:
+        if (self._peek().text == "filum" and self._peek(1).kind == TokenKind.IDENTIFIER
+                and self._peek(2).kind == TokenKind.ASSIGN
+                and self._peek(3).text == "incipe"
+                and self._peek(4).kind == TokenKind.IDENTIFIER):
+            opening = self._advance()
+            name = self._advance()
+            self._advance()
+            marker = self._expect(TokenKind.IDENTIFIER, "'incipe' exspectabatur.")
+            if marker.text != "incipe":
+                raise CompilationError(marker.line, marker.column, "'incipe' exspectabatur.")
+            call = self._parse_postfix()
+            if not isinstance(call, CallNode):
+                raise CompilationError(call.line, call.column, "Vocatio fili exspectabatur.")
+            return ThreadStartNode(opening.line, opening.column, name.text, call)
+        if (self._peek().text == "exspecta" and self._peek(1).kind == TokenKind.IDENTIFIER
+                and self._peek(2).kind in (TokenKind.DOT, TokenKind.SEMICOLON)):
+            opening = self._advance()
+            name = self._advance()
+            return ThreadJoinNode(opening.line, opening.column, name.text)
         if self._check(TokenKind.MUTABLE, TokenKind.IMMUTABLE, TokenKind.ETERNAL):
             return self._parse_declaration()
+        if self._looks_like_typed_declaration():
+            return self._parse_declaration()
         if self._check(TokenKind.IDENTIFIER):
-            return self._parse_assignment()
+            target = self._parse_postfix()
+            if self._match(TokenKind.ASSIGN):
+                operator = self._previous()
+                value = self._parse_expression()
+                if isinstance(target, IdentifierNode):
+                    return AssignmentNode(target.line, target.column, target.name,
+                                          operator.text, value)
+                return AssignmentNode(target.line, target.column, "", operator.text,
+                                      value, target)
+            if isinstance(target, CallNode):
+                return ExprStmtNode(target.line, target.column, target)
+            token = self._peek()
+            raise CompilationError(token.line, token.column,
+                                   "Operator assignationis exspectabatur.")
         if self._check(TokenKind.PRINT):
             return self._parse_print()
         if self._check(TokenKind.READ):
@@ -66,42 +154,218 @@ class Parser:
         token = self._peek()
         raise CompilationError(token.line, token.column, "Sententia exspectabatur.")
 
+    @staticmethod
+    def _is_type_kind(kind: TokenKind) -> bool:
+        return kind in (TokenKind.TYPE_I32, TokenKind.TYPE_I64,
+                        TokenKind.TYPE_INTEGER, TokenKind.TYPE_DUPLEX,
+                        TokenKind.TYPE_BOOL, TokenKind.TYPE_TEXT,
+                        TokenKind.IDENTIFIER)
+
+    def _parse_type(self, allow_nihil: bool = False) -> Token:
+        kinds = (TokenKind.TYPE_I32, TokenKind.TYPE_I64,
+                 TokenKind.TYPE_INTEGER, TokenKind.TYPE_DUPLEX,
+                 TokenKind.TYPE_BOOL, TokenKind.TYPE_TEXT,
+                 TokenKind.IDENTIFIER)
+        if allow_nihil:
+            kinds += (TokenKind.NIL,)
+        token = self._expect_any(kinds, "Typus exspectabatur.")
+        text = token.text
+        while self._check(TokenKind.DOT) and self._peek(1).kind == TokenKind.IDENTIFIER:
+            self._advance()
+            text += "." + self._advance().text
+        dimensions = 0
+        while self._match(TokenKind.LBRACKET):
+            self._expect(TokenKind.RBRACKET, "']' exspectabatur.")
+            dimensions += 1
+        if dimensions:
+            if dimensions > 2:
+                raise CompilationError(token.line, token.column, "Duae dimensiones tantum licent.")
+            marker = self._expect(TokenKind.IDENTIFIER, "'longitudo' exspectabatur.")
+            if marker.text != "longitudo":
+                raise CompilationError(marker.line, marker.column, "'longitudo' exspectabatur.")
+            self._expect(TokenKind.LPAREN, "'(' exspectabatur.")
+            sizes = []
+            for i in range(dimensions):
+                if i:
+                    self._expect(TokenKind.COMMA, "Comma exspectabatur.")
+                size = self._expect_any((TokenKind.INTEGER, TokenKind.ROMAN_INTEGER),
+                                        "Longitudo numerica exspectabatur.")
+                value = int(size.text) if size.kind == TokenKind.INTEGER else Lexer.roman_value(size.text)
+                if value < 1:
+                    raise CompilationError(size.line, size.column, "Longitudo positiva esse debet.")
+                sizes.append(str(value))
+            self._expect(TokenKind.RPAREN, "')' exspectabatur.")
+            text += "[" + ",".join(sizes) + "]"
+        return Token(token.kind, text, token.line, token.column)
+
+    def _looks_like_typed_declaration(self) -> bool:
+        if not self._is_type_kind(self._peek().kind):
+            return False
+        offset = 1
+        while self._peek(offset).kind == TokenKind.DOT and self._peek(offset + 1).kind == TokenKind.IDENTIFIER:
+            offset += 2
+        return (self._peek(offset).kind == TokenKind.IDENTIFIER
+                or (self._peek(offset).kind == TokenKind.LBRACKET
+                    and self._peek(offset + 1).kind == TokenKind.RBRACKET))
+
     def _parse_declaration(self) -> VarDeclNode:
-        keyword = self._advance()
-        type_token = self._expect_any(
-            (TokenKind.TYPE_I32, TokenKind.TYPE_I64, TokenKind.TYPE_BOOL),
-            "Typus exspectabatur.",
-        )
+        prefixed = self._check(TokenKind.MUTABLE, TokenKind.IMMUTABLE, TokenKind.ETERNAL)
+        keyword = self._advance() if prefixed else self._peek()
+        inferred_marker = (prefixed and keyword.kind in (TokenKind.IMMUTABLE, TokenKind.ETERNAL)
+                           and self._match(TokenKind.MUTABLE))
+        type_token: Token | None = None
+        if not prefixed:
+            type_token = self._parse_type()
+        elif not inferred_marker and (self._peek().kind in (TokenKind.TYPE_I32, TokenKind.TYPE_I64,
+                                 TokenKind.TYPE_INTEGER, TokenKind.TYPE_DUPLEX,
+                                 TokenKind.TYPE_BOOL, TokenKind.TYPE_TEXT) or (self._peek().kind == TokenKind.IDENTIFIER
+                                                       and self._peek(1).kind in (TokenKind.IDENTIFIER, TokenKind.LBRACKET))):
+            type_token = self._parse_type()
+        if (prefixed and keyword.kind == TokenKind.MUTABLE and type_token
+                and type_token.text not in ("32bitInt", "64bitInt", "sententia")):
+            raise CompilationError(type_token.line, type_token.column,
+                                   "Variabilis typum ex initio deducit; typus explicitus non licet.")
         name = self._expect(TokenKind.IDENTIFIER, "Nomen variabilis exspectabatur.")
         self._expect(TokenKind.ASSIGN, "Operator assignationis exspectabatur.")
         initializer = self._parse_expression()
+        if isinstance(initializer, ConstructorNode) and not initializer.type_name and type_token:
+            initializer.type_name = type_token.text
         return VarDeclNode(
             keyword.line,
             keyword.column,
-            keyword.text,
-            type_token.text,
+            keyword.text if prefixed else "",
+            type_token.text if type_token else None,
             name.text,
-            keyword.kind == TokenKind.MUTABLE,
+            not prefixed or keyword.kind == TokenKind.MUTABLE,
             initializer,
         )
 
-    def _parse_assignment(self) -> AssignmentNode:
-        name = self._advance()
-        operator = self._expect(TokenKind.ASSIGN, "Operator assignationis exspectabatur.")
-        value = self._parse_expression()
-        return AssignmentNode(name.line, name.column, name.text, operator.text, value)
+    def _looks_like_alternate_function(self) -> bool:
+        if not self._is_type_kind(self._peek().kind):
+            return False
+        offset = 1
+        while self._peek(offset).kind == TokenKind.DOT and self._peek(offset + 1).kind == TokenKind.IDENTIFIER:
+            offset += 2
+        return (self._peek(offset).kind == TokenKind.IDENTIFIER
+                and self._peek(offset + 1).kind == TokenKind.ASSIGN
+                and self._peek(offset + 2).kind == TokenKind.ANNOUNCE
+                and self._peek(offset + 3).kind == TokenKind.EDICT)
+
+    def _parse_alternate_function(self) -> FunctionDeclNode:
+        result = self._parse_type(allow_nihil=True)
+        name = self._expect(TokenKind.IDENTIFIER, "Nomen edicti exspectabatur.")
+        self._expect(TokenKind.ASSIGN, "Operator assignationis exspectabatur.")
+        self._expect(TokenKind.ANNOUNCE, "'nuntia' exspectabatur.")
+        self._expect(TokenKind.EDICT, "'edictum' exspectabatur.")
+        parameters = self._parse_parameters()
+        body = self._parse_function_body()
+        return FunctionDeclNode(result.line, result.column, name.text,
+                                parameters, result.text, body, True)
+
+    def _parse_function(self, keyword: Token, owner: str | None = None) -> FunctionDeclNode:
+        self._expect(TokenKind.EDICT, "'edictum' exspectabatur.")
+        name = self._expect(TokenKind.IDENTIFIER, "Nomen edicti exspectabatur.")
+        parameters = self._parse_parameters()
+        constructor = not self._match(TokenKind.RESULT)
+        if constructor:
+            if owner is None or name.text != owner:
+                token = self._peek()
+                raise CompilationError(token.line, token.column, "'remitteque' exspectabatur.")
+            result = Token(TokenKind.NIL, "nihil", name.line, name.column)
+        else:
+            result = self._parse_type(allow_nihil=True)
+        body = self._parse_function_body()
+        return FunctionDeclNode(keyword.line, keyword.column, name.text,
+                                parameters, result.text, body, constructor=constructor)
+
+    def _parse_parameters(self) -> list[ParameterNode]:
+        self._expect(TokenKind.QUO, "'quo' exspectabatur.")
+        self._expect(TokenKind.CAPE, "'cape' exspectabatur.")
+        if self._match(TokenKind.NIL):
+            return []
+        parameters: list[ParameterNode] = []
+        while True:
+            type_token = self._parse_type()
+            name = self._expect(TokenKind.IDENTIFIER, "Nomen parametri exspectabatur.")
+            parameters.append(ParameterNode(type_token.line, type_token.column,
+                                            type_token.text, name.text))
+            if not self._match(TokenKind.COMMA):
+                break
+        return parameters
+
+    def _parse_function_body(self) -> list[StmtNode]:
+        self._expect(TokenKind.BLOCK_OPEN, "Initium clausulae '<<' exspectabatur.")
+        if self._match(TokenKind.BLOCK_CLOSE):
+            return []
+        self._require_newline()
+        self._skip_newlines()
+        if self._match(TokenKind.BLOCK_CLOSE):
+            return []
+        body = self._parse_block_body()
+        self._expect(TokenKind.BLOCK_CLOSE, "Finis clausulae '>>' exspectabatur.")
+        return body
+
+    def _parse_struct(self, keyword: Token, short_name: Token | None = None) -> StructDeclNode:
+        if short_name is None:
+            self._expect(TokenKind.STRUCT, "'structuram' exspectabatur.")
+            immutable = self._match(TokenKind.IMMUTABLE_TYPE)
+            name = self._expect(TokenKind.IDENTIFIER, "Nomen structurae exspectabatur.")
+        else:
+            immutable, name = False, short_name
+        self._match(TokenKind.QUO)
+        self._expect(TokenKind.BLOCK_OPEN, "Initium clausulae '<<' exspectabatur.")
+        fields: list[FieldDeclNode] = []
+        methods: list[FunctionDeclNode] = []
+        nested: list[StructDeclNode] = []
+        self._skip_newlines()
+        while not self._check(TokenKind.BLOCK_CLOSE, TokenKind.EOF):
+            if self._match(TokenKind.ANNOUNCE):
+                opening = self._previous()
+                if self._check(TokenKind.STRUCT):
+                    nested.append(self._parse_struct(opening))
+                    self._expect(TokenKind.DOT, "Punctum exspectabatur.")
+                    self._skip_newlines()
+                    continue
+                methods.append(self._parse_function(opening, owner=name.text))
+            elif self._check(TokenKind.IDENTIFIER) and self._peek(1).kind == TokenKind.BLOCK_OPEN:
+                opening = self._advance()
+                nested.append(self._parse_struct(opening, short_name=opening))
+                self._expect(TokenKind.DOT, "Punctum exspectabatur.")
+                self._skip_newlines()
+                continue
+            elif self._check(TokenKind.FIELD_MUTABLE, TokenKind.IMMUTABLE, TokenKind.ETERNAL):
+                fields.append(self._parse_field())
+            else:
+                token = self._peek()
+                raise CompilationError(token.line, token.column,
+                                       "Campus aut edictum exspectabatur.")
+            self._expect(TokenKind.SEMICOLON, "Semicolon exspectabatur.")
+            self._skip_newlines()
+        self._expect(TokenKind.BLOCK_CLOSE, "Finis clausulae '>>' exspectabatur.")
+        return StructDeclNode(keyword.line, keyword.column, name.text,
+                              immutable, fields, methods, nested)
+
+    def _parse_field(self) -> FieldDeclNode:
+        keyword = self._advance()
+        inferred = self._match(TokenKind.MUTABLE)
+        type_token = None if inferred else self._parse_type()
+        name = self._expect(TokenKind.IDENTIFIER, "Nomen campi exspectabatur.")
+        initializer = self._parse_expression() if self._match(TokenKind.ASSIGN) else None
+        return FieldDeclNode(keyword.line, keyword.column, keyword.text,
+                             type_token.text if type_token else None, name.text,
+                             keyword.kind == TokenKind.FIELD_MUTABLE, initializer)
 
     def _parse_print(self) -> PrintNode:
         keyword = self._advance()
         if self._check(TokenKind.DOT, TokenKind.SEMICOLON, TokenKind.NEWLINE, TokenKind.EOF):
             token = self._peek()
             raise CompilationError(token.line, token.column, "Argumentum Scribe exspectabatur.")
-        arguments = [self._parse_print_argument()]
+        arguments = [self._parse_print_argument(first=True)]
         while self._match(TokenKind.COMMA):
-            arguments.append(self._parse_print_argument())
+            arguments.append(self._parse_print_argument(first=False))
         return PrintNode(keyword.line, keyword.column, arguments)
 
-    def _parse_print_argument(self) -> PrintArgumentNode:
+    def _parse_print_argument(self, first: bool) -> PrintArgumentNode:
         if (
             self._check(TokenKind.MINUS)
             and self._peek(1).kind == TokenKind.STRING
@@ -113,14 +377,15 @@ class Parser:
             marker = self._advance()
             value = self._parse_primary()
             return PrintArgumentNode(marker.line, marker.column, True, value)
-        value = self._parse_print_expression()
+        value = self._parse_print_expression(require_marker=first)
         return PrintArgumentNode(value.line, value.column, False, value)
 
-    def _parse_print_expression(self) -> ExprNode:
-        # The print-* EBNF rules partition expressions by their root shape.
-        # Reuse the precedence parser, then exclude the bare-string partition.
+    def _parse_print_expression(self, require_marker: bool) -> ExprNode:
+        # The first bare string is quoted explicitly; later bare strings are
+        # regular print arguments. Parentheses never bypass the first marker.
+        parenthesized = self._check(TokenKind.LPAREN)
         value = self._parse_expression()
-        if isinstance(value, StringLiteralNode):
+        if isinstance(value, StringLiteralNode) and (require_marker or parenthesized):
             raise CompilationError(
                 value.line,
                 value.column,
@@ -135,6 +400,32 @@ class Parser:
             name = self._expect(TokenKind.IDENTIFIER, "Nomen post 'in' exspectabatur.")
             target = name.text
         return ReadStmtNode(keyword.line, keyword.column, target)
+
+    def _parse_loop(self) -> LoopNode:
+        keyword = self._advance()
+        form = self._advance().text
+        condition = start = end = None
+        index_name = None
+        if form == "cycliciter":
+            self._expect(TokenKind.QUO, "'quo' exspectabatur.")
+            condition = self._parse_expression()
+        else:
+            start = self._parse_expression()
+            token = self._expect(TokenKind.IDENTIFIER, "'ad' exspectabatur.")
+            if token.text != "ad":
+                raise CompilationError(token.line, token.column, "'ad' exspectabatur.")
+            self._in_range_end = True
+            try:
+                end = self._parse_expression()
+            finally:
+                self._in_range_end = False
+            self._expect(TokenKind.QUO, "'quo' exspectabatur.")
+            token = self._expect(TokenKind.IDENTIFIER, "'index' exspectabatur.")
+            if token.text != "index":
+                raise CompilationError(token.line, token.column, "'index' exspectabatur.")
+            index_name = self._expect(TokenKind.IDENTIFIER, "Nomen indicis exspectabatur.").text
+        body = self._parse_function_body()
+        return LoopNode(keyword.line, keyword.column, condition, start, end, index_name, body)
 
     def _parse_if(self) -> IfNode:
         keyword = self._expect(TokenKind.IF, "'provisum' exspectabatur.")
@@ -195,13 +486,26 @@ class Parser:
         return statements
 
     def _parse_expression(self) -> ExprNode:
-        return self._parse_comparison()
+        expression = self._parse_and()
+        while self._match(TokenKind.OR):
+            operator = self._previous()
+            expression = LogicalExprNode(operator.line, operator.column, operator.text,
+                                         expression, self._parse_and())
+        return expression
+
+    def _parse_and(self) -> ExprNode:
+        expression = self._parse_comparison()
+        while self._match(TokenKind.AND):
+            operator = self._previous()
+            expression = LogicalExprNode(operator.line, operator.column, operator.text,
+                                         expression, self._parse_comparison())
+        return expression
 
     def _parse_comparison(self) -> ExprNode:
         left = self._parse_additive()
         operator: Token | None = None
         operator_text = ""
-        if self._match(TokenKind.EQ, TokenKind.NE, TokenKind.IDEM):
+        if self._match(TokenKind.EQ, TokenKind.NE, TokenKind.IDEM, TokenKind.GT, TokenKind.LT, TokenKind.GE, TokenKind.LE):
             operator = self._previous()
             operator_text = operator.text
         elif self._match(TokenKind.NON):
@@ -211,7 +515,7 @@ class Parser:
         if operator is None:
             return left
         right = self._parse_additive()
-        if self._check(TokenKind.EQ, TokenKind.NE, TokenKind.IDEM, TokenKind.NON):
+        if self._check(TokenKind.EQ, TokenKind.NE, TokenKind.IDEM, TokenKind.NON, TokenKind.GT, TokenKind.LT, TokenKind.GE, TokenKind.LE):
             token = self._peek()
             raise CompilationError(token.line, token.column, "Comparatio concatenata vetita est.")
         return ComparisonExprNode(operator.line, operator.column, operator_text, left, right)
@@ -260,7 +564,7 @@ class Parser:
         return self._parse_power()
 
     def _parse_power(self) -> ExprNode:
-        expression = self._parse_primary()
+        expression = self._parse_postfix()
         while self._match(TokenKind.CARET, TokenKind.POW_WORD):
             operator = self._previous()
             right = self._parse_power_operand()
@@ -276,9 +580,98 @@ class Parser:
                 operator.line, operator.column, operator.text,
                 self._parse_power_operand(),
             )
-        return self._parse_primary()
+        return self._parse_postfix()
+
+    def _parse_postfix(self) -> ExprNode:
+        expression = self._parse_primary()
+        while True:
+            if self._match(TokenKind.LBRACKET):
+                opening = self._previous()
+                index = self._parse_expression()
+                self._expect(TokenKind.RBRACKET, "']' exspectabatur.")
+                expression = IndexNode(opening.line, opening.column, expression, index)
+            elif self._check(TokenKind.DOT, TokenKind.MEMBER) and self._peek(1).kind == TokenKind.IDENTIFIER:
+                separator = self._advance()
+                name = self._advance()
+                expression = MemberAccessNode(separator.line, separator.column,
+                                              expression, name.text, separator.text)
+            elif self._match(TokenKind.LPAREN):
+                opening = self._previous()
+                args = self._parse_call_arguments(parenthesized=True)
+                expression = CallNode(opening.line, opening.column, expression,
+                                      args, "parentheses")
+            elif (self._check(TokenKind.QUO) and not
+                  (getattr(self, "_in_range_end", False) and self._peek(1).text == "index")):
+                opening = self._advance()
+                self._expect(TokenKind.CAPE, "'cape' exspectabatur.")
+                args = self._parse_call_arguments(parenthesized=False)
+                expression = CallNode(opening.line, opening.column, expression,
+                                      args, "quo cape")
+            elif self._match(TokenKind.CAPE):
+                if not isinstance(expression, IdentifierNode):
+                    token = self._previous()
+                    raise CompilationError(token.line, token.column,
+                                           "Nomen structurae exspectabatur.")
+                expression = self._parse_constructor(expression)
+            else:
+                break
+        return expression
+
+    def _parse_call_arguments(self, parenthesized: bool) -> list[ExprNode]:
+        if parenthesized and self._match(TokenKind.RPAREN):
+            return []
+        if self._match(TokenKind.NIL):
+            if parenthesized:
+                self._expect(TokenKind.RPAREN, "Clausula ')' exspectabatur.")
+            return []
+        arguments = [self._parse_expression()]
+        while self._match(TokenKind.COMMA):
+            arguments.append(self._parse_expression())
+        if parenthesized:
+            self._expect(TokenKind.RPAREN, "Clausula ')' exspectabatur.")
+        return arguments
+
+    def _parse_constructor(self, name: IdentifierNode) -> ConstructorNode:
+        arguments: list[ConstructorArgNode] = []
+        if self._match(TokenKind.NIL):
+            return ConstructorNode(name.line, name.column, name.name, arguments)
+        while True:
+            field_name: str | None = None
+            argument_line, argument_column = self._peek().line, self._peek().column
+            if self._check(TokenKind.IDENTIFIER) and self._peek(1).kind == TokenKind.ASSIGN:
+                field_name = self._advance().text
+                self._advance()
+            value = self._parse_expression()
+            arguments.append(ConstructorArgNode(argument_line, argument_column,
+                                                field_name, value))
+            if not self._match(TokenKind.COMMA):
+                break
+        return ConstructorNode(name.line, name.column, name.name, arguments)
 
     def _parse_primary(self) -> ExprNode:
+        if self._match(TokenKind.LBRACKET):
+            opening = self._previous()
+            items = []
+            if not self._check(TokenKind.RBRACKET):
+                items.append(self._parse_expression())
+                while self._match(TokenKind.COMMA):
+                    items.append(self._parse_expression())
+            self._expect(TokenKind.RBRACKET, "']' exspectabatur.")
+            return ArrayLiteralNode(opening.line, opening.column, items)
+        if self._match(TokenKind.NEW):
+            opening = self._previous()
+            type_name = ""
+            offset = 1
+            while self._peek(offset).kind == TokenKind.DOT and self._peek(offset + 1).kind == TokenKind.IDENTIFIER:
+                offset += 2
+            if self._check(TokenKind.IDENTIFIER) and self._peek(offset).kind == TokenKind.QUO:
+                type_name = self._parse_type().text
+                self._expect(TokenKind.QUO, "'quo' exspectabatur.")
+                self._expect(TokenKind.CAPE, "'cape' exspectabatur.")
+            node = self._parse_constructor(
+                IdentifierNode(opening.line, opening.column, type_name))
+            node.syntax = "novum"
+            return node
         if self._match(TokenKind.INTEGER):
             token = self._previous()
             value = 0

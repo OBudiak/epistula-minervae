@@ -1,0 +1,4 @@
+Nums{right=4, left=3, message=lala}
+Nums{right=9, left=8, message=other}
+9
+Nums{right=7, left=6, message=third}

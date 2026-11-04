@@ -1,0 +1,12 @@
+Program @1:1 statements=4
+  VarDecl @4:28 name="stage3_inline_1" type="integer" mutable=true keyword=""
+    ReadExpr @4:28
+  VarDecl @2:13 name="stage3_inline_2" type="integer" mutable=true keyword=""
+    Identifier @2:13 name="stage3_inline_1"
+  VarDecl @4:1 name="Result" type="integer" mutable=true keyword=""
+    Identifier @2:13 name="stage3_inline_2"
+  Print @5:1 arguments=2
+    PrintArgument @5:8 quoted=false
+      Identifier @5:8 name="Result"
+    PrintArgument @5:16 quoted=false
+      StringLiteral @5:16 value="\n"

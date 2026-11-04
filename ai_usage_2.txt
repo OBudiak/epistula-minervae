@@ -1,0 +1,71 @@
+# AI usage disclosure for Stage 2
+
+Author: Oleksandr Budiak <obudiak@kse.org.ua>
+Link: https://chatgpt.com/s/cx_6ae0b73e3f748191a8a948c0dac83e0a
+
+## Tools and conversation record
+
+Codex (GPT-6-sol and GPT-6-luna in the current session) was used to analyse the Stage 2 brief and Stage 1 repository, discuss the language design, and draft documentation and this implementation plan. No Stage 2 compiler code has been generated in this documentation pass. The author will add the public full-chat link for this conversation and any later AI conversations, or paste the exact prompts for conversations without a public link. Every link must open for the reviewer without signing in.
+
+The author specified these language decisions in the conversation: replace `ede edictum` with `nuntia edictum`; use `nuntia structuram`; permit positional and named constructor arguments together and field defaults; permit `.` and `>` member access and their mixing; use `reditus value!`; support both function-call spellings; search locals and parameters, then fields, then globals in a member; use `integer` and `duplex` as aliases while deferring `fractio`; infer ordinary variable and field types when an initializer gives an unambiguous type. Codex proposed exact details for constructor argument binding and some output and typing behavior; the author must review which of these were accepted or revised.
+
+## Work produced with AI in this pass
+
+Codex drafted the Stage 2 section of `docs/language-specification.md`, `docs/stage2-plan.md`, the README update, an annotation to the historical Stage 1 audit, and a synchronized DOCX specification. These documents are a design and work plan, not a claim that the Stage 2 compiler is implemented. The author must say which passages were accepted unchanged and which were edited, with reasons, after reviewing the local diff.
+
+## Code, tests and understanding
+
+In the subsequent Codex development pass, the assistant created `stage2` from `main`, extended the hand-written lexer, recursive-descent parser and AST, added a separate semantic pass in `epistula/semantics.py`, LLVM builder generation in `epistula/codegen.py`, the `.ll` CLI, Stage 2 EBNF, executable and negative tests, and runner changes. The author corrected the type design during the pass: `ludicium` is boolean and `sententia` is text. The assistant retained the old boolean use of `sententia` only when a legacy declaration's initializer makes that meaning unambiguous. The assistant also proposed and implemented `hoc` for the current object, low-32-bit runtime narrowing, and defaults that can read earlier fields. The author must review and either accept or revise these assistant-chosen rules.
+
+The local runner reported 111 passing file tests, including 21 executable cases, plus 32 independent regression tests at the time of this record. The assistant also compiled all 31 positive golden programs to IR and passed their IR through `llc`. This is the assistant's local verification, not a claim that the author personally ran or reviewed each test. The author must inspect the code and tests, identify which AI-produced parts were retained unchanged, describe their own material edits and reasons, and explain in their own words how the semantic pass and LLVM generation work. Do not describe planned or unreviewed work as author-written work.
+
+## Author review before submission
+
+The author must add the public chat link or exact prompts for every relevant conversation, confirm the tool list, distinguish accepted AI output from author changes for each part, explain their understanding in their own words, and record final verification. The Stage 2 brief treats a disclosure with only links, missing parts, or placeholders as incomplete and assigns 0 for the stage. This working record is not yet a final declaration.
+
+## Language correction pass on 27 October 2026
+
+Tool: Codex, current model gpt-6.1-sol, working through WSL shell tools and
+Python scripts. This pass changed compiler source, grammar, Stage 2 tests and
+language documentation. The existing disclosure remains outside commits at
+the author's request. The author still needs to provide the complete earlier
+conversation links and their own review and understanding.
+
+The author explicitly requested unprefixed typed variables, variabilis only for
+inference, mutabilis/immutabilis field modifiers, ordinary local declarations
+inside methods, optional named constructors without remitteque, novum creation
+with explicit or contextual type, nested structure declarations ending in a
+period, arbitrary named initialization order, correct text/numeric input, and
+cleanup of unnecessary Git history files without pushing or losing data.
+The author confirmed that a constructor is named after its structure and that
+methods end in >>; (a semicolon), not >>: (a colon).
+
+AI-produced implementation in this pass: lexer tokens and parser changes;
+constructor and nested-structure AST flags; symbol-table and type checks;
+definite field initialization across branches; checked LLVM input helpers;
+runtime number/text input representation; safe scanf conversion and EOF checks;
+runtime integer division guards; stale-output cleanup with input-file
+protection; Stage 2 positive, compiler-negative and runtime-negative cases;
+README and synchronized Markdown/DOCX specification. The assistant chose a
+fixed tagged input representation because the content of stdin is unknown
+during compilation. Typed text input preserves the original line, while typed
+integer input validates one token. The assistant retained legacy Stage 1
+declarations and ASTs because the brief explicitly requires compatibility.
+
+Verification performed by the assistant: 149 file tests and 34 regression
+tests passed; 28 original Stage 1 ASTs were compared directly with main and
+were unchanged; all 31 current positive AST programs compiled to LLVM IR and
+passed llc. The user's local program was rebuilt and checked with Legere, X,
+and 10 as input. Text input no longer printed uninitialized memory. DOCX
+package integrity was checked, but visual rendering was unavailable because
+LibreOffice is not installed. The author has not been represented as personally
+performing these checks.
+
+History maintenance: the assistant saved external Git bundles and worktree
+archives, then removed development-only plan/audit documents from unpublished
+stage2 commit snapshots. Published main/stage1 history was not rewritten.
+Generated IR, object files, binaries and user showcase files were not committed.
+The author must review the resulting diff, identify output accepted unchanged
+or revised and why, and explain the semantic pass, constructors and LLVM input
+handling in their own words. This remains a working disclosure until that
+personal review and the complete transcript record are added.

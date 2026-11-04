@@ -1,0 +1,61 @@
+# Stage 3 AI usage record
+
+Author: Oleksandr Budiak <obudiak@kse.org.ua>
+Tool used: OpenAI Codex, with shell access to the WSL repository.
+Сhat: https://chatgpt.com/s/cx_6aeb8eb22a0c81918bba9b29f7755b60
+
+The user prompts sent in this conversation are reproduced below. This record
+covers this conversation only. The author must add any other AI use if there
+is any, review the resulting code and this account, and supply the author's
+own understanding before submitting. The assistant cannot truthfully write
+that personal review on the author's behalf.
+
+
+## Work done with Codex
+
+Codex read the Stage 3 brief and Stage 2 repository, explained the requirements,
+identified that the existing string support should not be counted as a new
+feature without clarification, and proposed design options. The user selected
+and corrected the array, loop, thread and matrix-program rules in the prompts
+above. The assistant suggested inclusive range bounds, one-based indexing,
+thread handles, the join rule, disjoint writes without a mutex, and four
+workers computing five rows each; the user accepted these choices.
+
+Codex created the local stage3 branch from stage2, set the repository-local
+Git author to the user's requested identity, and implemented changes to the
+lexer, parser, AST, semantic checks, LLVM builder generation, checked-tree
+optimizer and command line. Codex also drafted the EBNF, README, examples,
+test fixtures, test-runner changes, matrix program, recorded sessions and this
+disclosure. The assistant debugged the range parser, flag positioning, inlining
+of narrowed results, name binding, reference lifetimes and read side effects
+after running tests. Code is retained from Codex's successive revisions unless
+the author subsequently edits it; do not interpret this as an assertion that
+the author personally reviewed every line. The author should add any material
+personal edits, what was retained and why, and independent verification results.
+
+The final full run performed by the assistant passed 384 file cases and 37
+regression cases. The suite includes execution with and without optimization
+and both recorded matrix sessions. These are assistant-run results, not an
+assertion of author verification.
+
+Codex also generated the five-slide defence presentation and PDF using the
+artifact-tool and ReportLab libraries, based on the implementation and README;
+the user should review and adapt these materials before presenting.
+
+After the user reported a test run appearing to hang, Codex observed that the
+test process was still compiling and linking cases, identified the lack of
+progress output, and added progress messages plus timeout reporting for
+optimized AST checks. Codex documented the test runner's behavior in the README.
+The user subsequently asked to create the final presentation and screenshots
+themselves; Codex provided a slide plan and commands for obtaining IR excerpts.
+
+## Author review and understanding
+
+This section requires the author's own review:
+В оптимізації невикористані функції та змінні прибираються з коду, але для змінної якщо вона має якісь помилки або може повпливати, тоді вона зберігається через DiscardNode. А тіло функції що викликається один раз підставляється в сам вираз.
+Ці проходи повторюються доки дерево не перестане змінюватися, тобто до фіксованої точки.
+Після оптимізації семантичний аналіз запускається повторно для актуалізації таблиць актуальних нод.
+Межі масиву перевіряються в два етапи, спочатку чи індекс менший за 1 і чи більший індекс ніж розмір призначеного масиву. Якщо одна з умов не збігається, то викидається помилка.
+Потоки реалізовані через pthread бібліотеку, наприклад pthread_create запускає згенеровану функцію обгорту, вона читає аргументи структури, а потім звільняє цю структуру та викликає тіло воркера.
+
+Більша частина синтаксису була придумана мною, лише блоки що випливали з мого опису мови, але не були прямо зазначені, але були запропоновані ШІ були погоджені. Деякі логічні моменти роботи коду також були визначені мною, наприклад як працюватимуть константи або римські числа.
